@@ -1,5 +1,6 @@
 """Pydantic v2 schemas for CardioMap 3D API."""
 
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -9,46 +10,107 @@ class HealthResponse(BaseModel):
 
     status: str = Field(default="ok", description="API operational status")
     app_name: str
-    version: str
-    artifacts_ready: bool = Field(description="Whether trained ML model artifacts exist")
-    disclaimer: str = Field(
-        default="CardioMap 3D is for educational/decision-support research only. Not a substitute for formal diagnostic imaging."
-    )
+    model_version: str
+    artifacts_ready: bool = Field(description="Whether trained ML model artifacts exist and loaded")
+    disclaimer: str = Field(description="Mandatory clinical decision-support research disclaimer")
 
 
-class VesselRiskScore(BaseModel):
-    """Vessel-level stenosis risk prediction and calibration details."""
+class CutoffThreshold(BaseModel):
+    """Threshold cutoffs for risk tier classification and UI legend display."""
 
-    vessel: str = Field(description="Coronary vessel identifier: LAD, LCX, or RCA")
-    stenosis_probability: float = Field(
-        ge=0.0, le=1.0, description="Calibrated risk probability of significant stenosis (>50%)"
-    )
-    risk_tier: str = Field(description="Low (<30%), Moderate (30-70%), or High (>70%)")
-    confidence_interval: list[float] | None = Field(
-        default=None, description="95% CI from bootstrap or ensemble variance"
-    )
-    is_illustrative: bool = Field(
-        default=True, description="Vessel lumen visualization mapping is strictly illustrative"
-    )
+    operating_threshold: float = Field(description="Selected operating cutoff t (Youden's J or Max F1)")
+    moderate_min: float = Field(description="Lower bound for moderate risk (= t)")
+    high_min: float = Field(description="Lower bound for high risk (= t + 0.15)")
+    cohort_prevalence: float = Field(description="Prevalence of positive outcome in training cohort")
 
 
-class FeatureContribution(BaseModel):
-    """Feature SHAP contribution for explainability."""
+class SchemaResponse(BaseModel):
+    """Feature schema response for dynamic UI forms and risk cutoffs for UI legends."""
 
-    feature_name: str
-    display_name: str
-    feature_value: float | str
-    shap_value: float
+    feature_schema: dict[str, Any] = Field(description="Full 55-feature schema dictionary")
+    risk_cutoffs: dict[str, CutoffThreshold] = Field(description="Per-target risk level thresholds and margins")
+    margin: float = Field(default=0.15, description="Margin above operating threshold defining High risk")
+
+
+class TargetPrediction(BaseModel):
+    """Target prediction score, label, risk tier, and relative risk."""
+
+    probability: float = Field(ge=0.01, le=0.99, description="Calibrated risk probability clipped to [0.01, 0.99]")
+    label: int = Field(description="Binary classification label (1 = Elevated Risk, 0 = Low Risk)")
+    risk_level: str = Field(description="'low', 'moderate', or 'high'")
+    cohort_prevalence: float = Field(description="Baseline cohort prevalence rate")
+    relative_risk: float = Field(description="Relative risk ratio (probability / cohort_prevalence)")
+
+
+class PredictResponse(BaseModel):
+    """Multi-vessel CAD prediction response with coherence and imputation audit."""
+
+    cad: TargetPrediction = Field(description="Overall CAD prediction")
+    vessels: dict[str, TargetPrediction] = Field(description="Individual coronary artery vessel predictions (lad, lcx, rca)")
+    coherence: dict[str, Any] = Field(description="Anatomical coherence audit between overall CAD and vessels")
+    imputed_features: list[str] = Field(description="List of omitted feature names that were filled using schema defaults")
+    warnings: list[str] = Field(description="Validation warnings for out-of-range clinical inputs")
+    model_version: str
+    disclaimer: str
+
+
+class FeatureExplanation(BaseModel):
+    """Local SHAP feature attribution entry."""
+
+    feature: str = Field(description="Raw feature identifier")
+    display_label: str = Field(description="Human-readable display name")
+    patient_value: Any = Field(description="Input value provided for the patient")
+    shap_value: float = Field(description="SHAP attribution value in model raw score units")
+    relative_contribution_pct: float = Field(description="Normalized signed relative contribution percentage")
     direction: str = Field(description="'increases_risk' or 'decreases_risk'")
+    stability_label: str = Field(description="'stable', 'moderate', or 'low' persistence across bootstrap resamples")
 
 
-class PredictionResponse(BaseModel):
-    """Multi-vessel CAD prediction response with SHAP attributions."""
+class TargetExplanation(BaseModel):
+    """Per-target explainability breakdown."""
 
-    cad_probability: float = Field(ge=0.0, le=1.0)
-    cad_predicted_class: int
-    vessels: dict[str, VesselRiskScore]
-    top_explanations: list[FeatureContribution]
-    clinical_disclaimer: str = Field(
-        default="Decision support only. Predictions are vessel-level probabilities and do not localize lesions. Not a substitute for coronary angiography."
-    )
+    target: str
+    raw_unit: str = Field(description="Measurement unit for raw SHAP values")
+    base_value: float = Field(description="Expected base score across reference background")
+    contributions: list[FeatureExplanation] = Field(description="Top N local feature attributions")
+
+
+class PhysiologyItem(BaseModel):
+    """Physiological factor contribution to overall CAD."""
+
+    feature: str
+    display_label: str
+    category: str
+    patient_value: Any
+    relative_contribution_pct: float
+    direction: str
+    stability_label: str
+
+
+class ExplainResponse(BaseModel):
+    """Full SHAP explainability response."""
+
+    targets: dict[str, TargetExplanation] = Field(description="Explanations per target (cad, lad, lcx, rca)")
+    physiology: list[PhysiologyItem] = Field(description="Key physiological measurement attributions for overall CAD")
+    model_version: str
+    disclaimer: str
+
+
+class SamplePatient(BaseModel):
+    """Real de-identified patient sample from dataset."""
+
+    sample_id: str
+    dataset_row_index: int
+    cad_probability: float
+    risk_tier: str
+    features: dict[str, Any]
+
+
+class MetricsResponse(BaseModel):
+    """Complete performance metrics, candidate comparison, and baseline benchmarks."""
+
+    deployed_models: dict[str, Any]
+    candidate_comparison: dict[str, Any]
+    clinical_baseline_comparison: dict[str, Any]
+    nested_tuning_config: dict[str, Any]
+    disclosures: dict[str, str]

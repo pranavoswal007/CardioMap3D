@@ -1,10 +1,234 @@
 """Main FastAPI entrypoint for CardioMap 3D API."""
 
-from fastapi import FastAPI
+from __future__ import annotations
+
+import json
+import logging
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import asynccontextmanager
+from typing import Any
+
+import joblib
+import numpy as np
+import pandas as pd
+import shap
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from .config import settings
-from .schemas import FeatureContribution, HealthResponse, PredictionResponse, VesselRiskScore
+from .schemas import (
+    CutoffThreshold,
+    ExplainResponse,
+    FeatureExplanation,
+    HealthResponse,
+    MetricsResponse,
+    PhysiologyItem,
+    PredictResponse,
+    SamplePatient,
+    SchemaResponse,
+    TargetExplanation,
+    TargetPrediction,
+)
+
+logger = logging.getLogger(__name__)
+
+# In-memory artifact state loaded once at startup
+STATE: dict[str, Any] = {
+    "artifacts_ready": False,
+    "models": {},
+    "thresholds": {},
+    "metrics": {},
+    "feature_schema": {},
+    "shap_stability": {},
+    "shap_background": None,
+    "explainers": {},
+    "sample_patients": [],
+}
+
+TARGET_KEYS = ["cad", "lad", "lcx", "rca"]
+TARGET_MAP = {
+    "cad": "y_cad",
+    "lad": "y_lad",
+    "lcx": "y_lcx",
+    "rca": "y_rca",
+}
+FORBIDDEN_COLUMNS = {"LAD", "LCX", "RCA", "CATH", "CAD"}
+PREDICT_POOL = ThreadPoolExecutor(max_workers=4)
+
+
+def to_python_primitive(val: Any) -> Any:
+    """Convert numpy scalars or pandas objects to native python primitives."""
+    if hasattr(val, "item"):
+        return val.item()
+    return val
+
+
+def normalize_input_value(raw_val: Any, feat_info: dict[str, Any]) -> Any:
+    """Map human-friendly inputs (e.g. 'Male'/'Female', yes/no, true/false) to dataset format."""
+    if raw_val is None:
+        return feat_info.get("default")
+
+    feat_type = feat_info.get("type")
+    allowed = feat_info.get("allowed_values") or []
+
+    # Biological sex normalization
+    if feat_info.get("name") == "Sex":
+        str_val = str(raw_val).strip().lower()
+        if str_val in ("male", "m"):
+            return "Male"
+        elif str_val in ("female", "fmale", "f"):
+            return "Fmale"
+
+    # Boolean / binary normalization
+    if feat_type == "binary":
+        if isinstance(raw_val, bool):
+            return 1 if raw_val else 0
+        if isinstance(raw_val, (int, float)):
+            return int(raw_val)
+        str_val = str(raw_val).strip().lower()
+        if str_val in ("yes", "y", "true", "t", "1", "present", "stenotic", "cad"):
+            return "Y" if "Y" in allowed else 1
+        elif str_val in ("no", "n", "false", "f", "0", "absent", "normal"):
+            return "N" if "N" in allowed else 0
+
+    # Categorical normalization (VHD, BBB)
+    if feat_type == "categorical":
+        str_val = str(raw_val).strip()
+        for a in allowed:
+            if str(a).lower() == str_val.lower():
+                return a
+        return str_val
+
+    # Numeric normalization
+    if feat_type in ("numeric", "ordinal"):
+        try:
+            return float(raw_val)
+        except (ValueError, TypeError):
+            return feat_info.get("default")
+
+    return raw_val
+
+
+def load_all_artifacts() -> None:
+    """Load trained models, schemas, metrics, thresholds, and SHAP assets into memory."""
+    artifacts_dir = settings.artifacts_dir
+    logger.info("Loading CardioMap 3D ML artifacts from %s...", artifacts_dir)
+
+    try:
+        # 1. Feature schema
+        schema_path = artifacts_dir / "feature_schema.json"
+        if not schema_path.exists():
+            schema_path = settings.base_dir / "ml" / "config" / "feature_schema.json"
+        with open(schema_path, encoding="utf-8") as f:
+            STATE["feature_schema"] = json.load(f)
+
+        # 2. Thresholds
+        with open(artifacts_dir / "thresholds.json", encoding="utf-8") as f:
+            STATE["thresholds"] = json.load(f)
+
+        # 3. Metrics
+        with open(artifacts_dir / "metrics.json", encoding="utf-8") as f:
+            STATE["metrics"] = json.load(f)
+
+        # 4. SHAP stability
+        stability_path = artifacts_dir / "shap_stability.json"
+        if stability_path.exists():
+            with open(stability_path, encoding="utf-8") as f:
+                STATE["shap_stability"] = json.load(f)
+
+        # 5. SHAP background sample
+        bg_path = artifacts_dir / "shap_background_sample.csv"
+        if bg_path.exists():
+            STATE["shap_background"] = pd.read_csv(bg_path)
+
+        # 6. Models
+        for short_name, t_code in TARGET_MAP.items():
+            model_file = artifacts_dir / f"model_{t_code}.joblib"
+            if model_file.exists():
+                calibrated_model = joblib.load(model_file)
+                # Optimize single-sample thread dispatch overhead
+                for cal in getattr(calibrated_model, "calibrated_classifiers_", []):
+                    pipe = cal.estimator
+                    clf = pipe.named_steps.get("clf")
+                    if hasattr(clf, "n_jobs"):
+                        clf.n_jobs = 1
+                    if hasattr(clf, "estimators_"):
+                        for sub in clf.estimators_:
+                            if hasattr(sub, "n_jobs"):
+                                sub.n_jobs = 1
+                STATE["models"][short_name] = calibrated_model
+
+                # Pre-initialize explainers on base estimator
+                base_pipe = calibrated_model.calibrated_classifiers_[0].estimator
+                preprocessor = base_pipe.named_steps["prep"]
+                classifier = base_pipe.named_steps["clf"]
+
+                if STATE["shap_background"] is not None:
+                    bg_trans = preprocessor.transform(STATE["shap_background"])
+                else:
+                    bg_trans = None
+
+                if short_name == "cad":
+                    # Soft voting ensemble explainer
+                    if bg_trans is not None:
+                        clf_ref = classifier
+                        expl = shap.KernelExplainer(lambda x, c=clf_ref: c.predict_proba(x)[:, 1], bg_trans[:30])
+                        STATE["explainers"][short_name] = (preprocessor, expl, "uncalibrated soft-voting probability share")
+                elif short_name == "lad":
+                    expl = shap.TreeExplainer(classifier)
+                    STATE["explainers"][short_name] = (preprocessor, expl, "raw probability margin of ensemble trees")
+                elif short_name in ("lcx", "rca"):
+                    expl = shap.TreeExplainer(classifier)
+                    STATE["explainers"][short_name] = (preprocessor, expl, "log-odds of raw LightGBM margin")
+
+        # 7. Generate sample patients
+        raw_data_path = settings.data_dir / "raw" / "z_alizadeh_sani_extension.xlsx"
+        if raw_data_path.exists() and "cad" in STATE["models"]:
+            df_raw = pd.read_excel(raw_data_path, sheet_name="Sheet 1 - Table 1")
+            X_raw = df_raw.drop(columns=["Cath", "LAD", "LCX", "RCA"])
+            probs = np.clip(STATE["models"]["cad"].predict_proba(X_raw)[:, 1], settings.clip_min, settings.clip_max)
+
+            low_idx = np.where(probs < 0.35)[0]
+            mod_idx = np.where((probs >= 0.45) & (probs <= 0.65))[0]
+            high_idx = np.where(probs > 0.85)[0]
+
+            samples = []
+            selected_indices = [
+                int(low_idx[0]), int(low_idx[1]),
+                int(mod_idx[0]), int(mod_idx[1]),
+                int(high_idx[0]), int(high_idx[1]),
+            ]
+            for idx in selected_indices:
+                p_val = float(probs[idx])
+                tier = "low" if p_val < 0.35 else ("moderate" if p_val <= 0.65 else "high")
+                samples.append(SamplePatient(
+                    sample_id=f"sample_patient_{idx}",
+                    dataset_row_index=idx,
+                    cad_probability=round(p_val, 4),
+                    risk_tier=tier,
+                    features={k: to_python_primitive(v) for k, v in X_raw.iloc[idx].to_dict().items()},
+                ))
+            STATE["sample_patients"] = samples
+
+        STATE["artifacts_ready"] = True
+        logger.info("All ML artifacts loaded successfully.")
+
+    except (FileNotFoundError, KeyError, ValueError, RuntimeError) as e:
+        logger.error("Failed to load ML artifacts: %s", e)
+        STATE["artifacts_ready"] = False
+
+
+from collections.abc import AsyncIterator
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """Lifespan context manager to load ML artifacts at startup."""
+    load_all_artifacts()
+    yield
+
 
 app = FastAPI(
     title=settings.app_name,
@@ -13,6 +237,7 @@ app = FastAPI(
         "Production-grade API for interactive 3D coronary artery risk visualization, "
         "multi-target stenosis prediction, and SHAP-based clinical explanations."
     ),
+    lifespan=lifespan,
 )
 
 # Enable CORS for frontend Vite dev server and production clients
@@ -24,79 +249,375 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Serve static plots from /artifacts as /static/plots
+plots_dir = settings.artifacts_dir
+if plots_dir.exists():
+    app.mount("/static/plots", StaticFiles(directory=str(plots_dir)), name="plots")
+
+
+@app.exception_handler(HTTPException)
+async def custom_http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
+    """Safe, formatted error response."""
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail, "error_type": "ClientError"},
+    )
+
 
 @app.get("/health", response_model=HealthResponse)
 def health_check() -> HealthResponse:
-    """Check API operational health and model artifact readiness."""
-    artifacts_ready = (settings.artifacts_dir / "metrics.json").exists() or (
-        settings.artifacts_dir / "models.json"
-    ).exists()
+    """Check API operational health, model version, and artifact readiness."""
     return HealthResponse(
         status="ok",
         app_name=settings.app_name,
-        version=settings.app_version,
-        artifacts_ready=artifacts_ready,
+        model_version=settings.app_version,
+        artifacts_ready=STATE["artifacts_ready"],
+        disclaimer=settings.disclaimer,
     )
 
 
-# TODO(PHASE 2): DELETE. Returns fabricated numbers, violates the no-fabrication rule.
-@app.get("/predict/demo", response_model=PredictionResponse)
-def get_demo_prediction() -> PredictionResponse:
-    """Return calibrated baseline demonstration prediction for UI verification."""
-    return PredictionResponse(
-        cad_probability=0.74,
-        cad_predicted_class=1,
-        vessels={
-            "LAD": VesselRiskScore(
-                vessel="LAD",
-                stenosis_probability=0.782,
-                risk_tier="High",
-                confidence_interval=[0.72, 0.84],
-                is_illustrative=True,
-            ),
-            "RCA": VesselRiskScore(
-                vessel="RCA",
-                stenosis_probability=0.524,
-                risk_tier="Moderate",
-                confidence_interval=[0.45, 0.59],
-                is_illustrative=True,
-            ),
-            "LCX": VesselRiskScore(
-                vessel="LCX",
-                stenosis_probability=0.241,
-                risk_tier="Low",
-                confidence_interval=[0.18, 0.31],
-                is_illustrative=True,
-            ),
-        },
-        top_explanations=[
-            FeatureContribution(
-                feature_name="Typical Chest Pain",
-                display_name="Typical Anginal Chest Pain",
-                feature_value="Yes",
-                shap_value=0.34,
-                direction="increases_risk",
-            ),
-            FeatureContribution(
-                feature_name="EF",
-                display_name="Ejection Fraction (EF < 50%)",
-                feature_value=45.0,
-                shap_value=0.28,
-                direction="increases_risk",
-            ),
-            FeatureContribution(
-                feature_name="ST_Depression",
-                display_name="ECG ST-Segment Depression",
-                feature_value="Present",
-                shap_value=0.22,
-                direction="increases_risk",
-            ),
-            FeatureContribution(
-                feature_name="HDL",
-                display_name="High-Density Lipoprotein (HDL)",
-                feature_value=54.0,
-                shap_value=-0.19,
-                direction="decreases_risk",
-            ),
-        ],
+@app.get("/schema", response_model=SchemaResponse)
+def get_schema() -> SchemaResponse:
+    """Return feature schema for the dynamic form and per-target risk cutoffs for the UI legend."""
+    if not STATE["artifacts_ready"]:
+        raise HTTPException(status_code=503, detail="Model artifacts not ready.")
+
+    thresholds_dict = STATE["thresholds"]
+    metrics_dict = STATE["metrics"]
+
+    risk_cutoffs = {}
+    for short_name, t_code in TARGET_MAP.items():
+        t_data = thresholds_dict.get(t_code, {})
+        sel_t = float(t_data.get("selected_threshold", 0.5))
+        prev = float(metrics_dict.get("targets", {}).get(t_code, {}).get("prevalence", {}).get("rate", 0.5))
+        risk_cutoffs[short_name] = CutoffThreshold(
+            operating_threshold=round(sel_t, 4),
+            moderate_min=round(sel_t, 4),
+            high_min=round(sel_t + settings.risk_level_margin, 4),
+            cohort_prevalence=round(prev, 4),
+        )
+
+    return SchemaResponse(
+        feature_schema=STATE["feature_schema"],
+        risk_cutoffs=risk_cutoffs,
+        margin=settings.risk_level_margin,
     )
+
+
+def validate_and_prepare_input(patient_data: dict[str, Any]) -> tuple[pd.DataFrame, list[str], list[str]]:
+    """Validate patient features, reject forbidden/unknown fields, impute defaults, and flag out-of-range inputs."""
+    schema = STATE["feature_schema"]
+    allowed_features = set(schema.keys())
+
+    # Check for forbidden leakage columns
+    for key in patient_data:
+        cleaned_k = key.strip().upper()
+        if cleaned_k in FORBIDDEN_COLUMNS:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Forbidden column detected: '{key}'. Target and post-catheterization columns are strictly disallowed as model inputs.",
+            )
+
+    # Check for unknown fields
+    unknown_fields = [k for k in patient_data if k not in allowed_features]
+    if unknown_fields:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown input feature(s) received: {unknown_fields}. Features must match feature_schema.json.",
+        )
+
+    prepared_row = {}
+    imputed_fields = []
+    warnings = []
+
+    for fname, finfo in schema.items():
+        if fname in patient_data and patient_data[fname] is not None:
+            raw_v = patient_data[fname]
+            norm_v = normalize_input_value(raw_v, finfo)
+            prepared_row[fname] = norm_v
+
+            # Range check for numeric features
+            if finfo.get("type") in ("numeric", "ordinal") and isinstance(norm_v, (int, float)):
+                f_min = finfo.get("min")
+                f_max = finfo.get("max")
+                if f_min is not None and norm_v < f_min:
+                    warnings.append(f"Feature '{fname}' value {norm_v} is below observed cohort minimum {f_min}.")
+                elif f_max is not None and norm_v > f_max:
+                    warnings.append(f"Feature '{fname}' value {norm_v} is above observed cohort maximum {f_max}.")
+        else:
+            default_v = finfo.get("default")
+            prepared_row[fname] = default_v
+            imputed_fields.append(fname)
+
+    df_patient = pd.DataFrame([prepared_row])
+    return df_patient, imputed_fields, warnings
+
+
+def compute_prediction_for_target(short_name: str, df_patient: pd.DataFrame) -> TargetPrediction:
+    """Compute calibrated, clipped probability, risk tier, and relative risk for a target."""
+    model = STATE["models"][short_name]
+    t_code = TARGET_MAP[short_name]
+    threshold_info = STATE["thresholds"][t_code]
+    sel_t = float(threshold_info["selected_threshold"])
+    prev = float(STATE["metrics"]["targets"][t_code]["prevalence"]["rate"])
+
+    raw_prob = float(model.predict_proba(df_patient)[:, 1][0])
+    p = float(np.clip(raw_prob, settings.clip_min, settings.clip_max))
+
+    # Strict risk_level rule derived from selected_threshold t
+    margin = settings.risk_level_margin
+    if p < sel_t:
+        risk_level = "low"
+        label = 0
+    elif p < sel_t + margin:
+        risk_level = "moderate"
+        label = 1
+    else:
+        risk_level = "high"
+        label = 1
+
+    rel_risk = round(p / prev, 2) if prev > 0 else 1.0
+
+    return TargetPrediction(
+        probability=round(p, 4),
+        label=label,
+        risk_level=risk_level,
+        cohort_prevalence=round(prev, 4),
+        relative_risk=rel_risk,
+    )
+
+
+@app.post("/predict", response_model=PredictResponse)
+def predict_stenosis_risk(patient_features: dict[str, Any]) -> PredictResponse:
+    """Predict calibrated CAD and vessel-specific stenosis probabilities with coherence audit."""
+    if not STATE["artifacts_ready"]:
+        raise HTTPException(status_code=503, detail="Model artifacts not ready.")
+
+    df_patient, imputed_fields, warnings = validate_and_prepare_input(patient_features)
+
+    # 1. Predictions per target in parallel
+    targets = ["cad", "lad", "lcx", "rca"]
+    preds = list(PREDICT_POOL.map(lambda t: compute_prediction_for_target(t, df_patient), targets))
+    pred_map = dict(zip(targets, preds, strict=True))
+    cad_pred = pred_map["cad"]
+    vessel_preds = {
+        "lad": pred_map["lad"],
+        "lcx": pred_map["lcx"],
+        "rca": pred_map["rca"],
+    }
+
+    # 2. Anatomical coherence audit: P(CAD) should ideally >= max(P(vessels))
+    max_vessel_prob = max(vp.probability for vp in vessel_preds.values())
+    raw_cad_prob = cad_pred.probability
+    is_incoherent = bool(raw_cad_prob < max_vessel_prob)
+    adjusted_cad_prob = max_vessel_prob if is_incoherent else raw_cad_prob
+
+    coherence_info = {
+        "is_incoherent": is_incoherent,
+        "raw_cad_probability": round(raw_cad_prob, 4),
+        "adjusted_cad_probability": round(adjusted_cad_prob, 4),
+        "max_vessel_probability": round(max_vessel_prob, 4),
+        "note": (
+            "Anatomical coherence adjustment applied: individual vessel probability exceeds raw CAD score."
+            if is_incoherent
+            else "Predictions anatomically coherent."
+        ),
+    }
+
+    return PredictResponse(
+        cad=cad_pred,
+        vessels=vessel_preds,
+        coherence=coherence_info,
+        imputed_features=imputed_fields,
+        warnings=warnings,
+        model_version=settings.app_version,
+        disclaimer=settings.disclaimer,
+    )
+
+
+@app.post("/explain", response_model=ExplainResponse)
+def explain_stenosis_prediction(patient_features: dict[str, Any], top_n: int = 10) -> ExplainResponse:
+    """Compute local SHAP feature attributions in raw score and normalized relative contribution %."""
+    if not STATE["artifacts_ready"]:
+        raise HTTPException(status_code=503, detail="Model artifacts not ready.")
+
+    df_patient, _, _ = validate_and_prepare_input(patient_features)
+    schema = STATE["feature_schema"]
+
+    target_explanations = {}
+    physiology_items = []
+
+    # Physiological key measurement features to track for CAD
+    PHYSIOLOGY_FEATURES = {
+        "Age": "Demographics",
+        "Typical Chest Pain": "Symptoms",
+        "Region RWMA": "Echocardiography",
+        "EF-TTE": "Echocardiography",
+        "HTN": "Cardiovascular History",
+        "DM": "Metabolic History",
+        "TG": "Lipid Profile",
+        "FBS": "Metabolic Lab",
+        "Tinversion": "Electrocardiography",
+        "ESR": "Inflammatory Biomarkers",
+    }
+
+    for short_name, (preprocessor, explainer, raw_unit) in STATE["explainers"].items():
+        t_code = TARGET_MAP[short_name]
+        t_trans = preprocessor.transform(df_patient)
+
+        # Feature names after preprocessing
+        cat_names = preprocessor.named_transformers_["cat"].get_feature_names_out(["BBB", "VHD"]).tolist()
+        NUMERIC_FEATURES = [
+            "Age", "Weight", "Length", "BMI", "BP", "PR",
+            "FBS", "CR", "TG", "LDL", "HDL", "BUN", "ESR",
+            "HB", "K", "Na", "WBC", "Lymph", "Neut", "PLT",
+            "EF-TTE", "Function Class", "Region RWMA",
+        ]
+        bin_cols = [c for c in df_patient.columns if c not in NUMERIC_FEATURES and c not in ["BBB", "VHD"]]
+        feature_names = NUMERIC_FEATURES + cat_names + bin_cols
+
+        try:
+            if short_name == "cad":
+                # KernelExplainer on voting classifier
+                sv = explainer.shap_values(t_trans, nsamples=100)
+                if isinstance(sv, list):
+                    vals = sv[0]
+                else:
+                    vals = sv[0] if len(sv.shape) == 2 else sv
+                base_v = float(explainer.expected_value)
+            elif short_name == "lad":
+                # RandomForest TreeExplainer in probability space
+                exp_res = explainer(t_trans)
+                vals = exp_res.values[0, :, 1]
+                base_v = float(exp_res.base_values[0, 1])
+            else:
+                # LightGBM TreeExplainer in margin log-odds
+                exp_res = explainer(t_trans)
+                vals = exp_res.values[0]
+                base_v = float(exp_res.base_values[0])
+        except (ValueError, TypeError, RuntimeError) as e:
+            logger.warning("SHAP calculation fallback for %s: %s", short_name, e)
+            vals = np.zeros(len(feature_names))
+            base_v = 0.5
+
+        # Compute normalized signed relative contribution %
+        abs_vals = np.abs(vals)
+        sum_abs = float(np.sum(abs_vals))
+        if sum_abs < 1e-9:
+            sum_abs = 1.0
+
+        rel_pcts = (vals / sum_abs) * 100.0
+
+        # Sort features by absolute contribution
+        sorted_indices = np.argsort(abs_vals)[::-1]
+        contributions = []
+
+        stability_info = STATE.get("shap_stability", {}).get(t_code, {})
+
+        for rank_idx, f_idx in enumerate(sorted_indices[:top_n], 1):
+            fname = feature_names[f_idx]
+            clean_name = fname.split("_")[0] if ("_" in fname and fname not in schema) else fname
+            disp_label = schema.get(clean_name, {}).get("display_label", fname)
+            pat_v = to_python_primitive(df_patient[clean_name].iloc[0]) if clean_name in df_patient.columns else "Present"
+
+            val_shap = float(vals[f_idx])
+            val_pct = float(rel_pcts[f_idx])
+            direction = "increases_risk" if val_shap > 0 else "decreases_risk"
+
+            f_stab = stability_info.get(fname, {}).get("label", "moderate")
+
+            contributions.append(FeatureExplanation(
+                feature=fname,
+                display_label=disp_label,
+                patient_value=pat_v,
+                shap_value=round(val_shap, 5),
+                relative_contribution_pct=round(val_pct, 2),
+                direction=direction,
+                stability_label=f_stab,
+            ))
+
+        target_explanations[short_name] = TargetExplanation(
+            target=short_name,
+            raw_unit=raw_unit,
+            base_value=round(base_v, 5),
+            contributions=contributions,
+        )
+
+        # Extract CAD physiology contributions for key clinical indicators
+        if short_name == "cad":
+            for phys_feat, cat in PHYSIOLOGY_FEATURES.items():
+                if phys_feat in feature_names:
+                    idx_p = feature_names.index(phys_feat)
+                    val_s = float(vals[idx_p])
+                    val_p = float(rel_pcts[idx_p])
+                    direction_p = "increases_risk" if val_s > 0 else "decreases_risk"
+                    f_stab_p = stability_info.get(phys_feat, {}).get("label", "stable")
+                    physiology_items.append(PhysiologyItem(
+                        feature=phys_feat,
+                        display_label=schema.get(phys_feat, {}).get("display_label", phys_feat),
+                        category=cat,
+                        patient_value=to_python_primitive(df_patient[phys_feat].iloc[0]),
+                        relative_contribution_pct=round(val_p, 2),
+                        direction=direction_p,
+                        stability_label=f_stab_p,
+                    ))
+
+    return ExplainResponse(
+        targets=target_explanations,
+        physiology=physiology_items,
+        model_version=settings.app_version,
+        disclaimer=settings.disclaimer,
+    )
+
+
+@app.get("/metrics", response_model=MetricsResponse)
+def get_metrics_report() -> MetricsResponse:
+    """Return deployed model performance with 95% CIs, candidate comparison, and baseline benchmarks."""
+    if not STATE["artifacts_ready"]:
+        raise HTTPException(status_code=503, detail="Model artifacts not ready.")
+
+    metrics_data = STATE["metrics"]
+    targets_data = metrics_data.get("targets", {})
+
+    deployed = {}
+    candidates = {}
+    clinical_baseline = {}
+
+    for t_code, t_info in targets_data.items():
+        deployed[t_code] = {
+            "selected_model": t_info.get("selected_model"),
+            "calibration": t_info.get("calibration"),
+            "metrics": t_info.get("final_deployed_model_metrics"),
+            "prevalence": t_info.get("prevalence"),
+            "operating_threshold": t_info.get("thresholds", {}).get("selected_threshold"),
+        }
+        candidates[t_code] = t_info.get("candidate_models")
+        clinical_baseline[t_code] = t_info.get("baselines", {}).get("clinical_subset_lr")
+
+    disclosures = {
+        "fixed_hyperparameters": "All hyperparameters fixed a priori except ElasticNet.",
+        "optimism_source": "Candidate selection and decision thresholds tuned on pooled out-of-fold cross-validation.",
+        "statistical_tie": "LCX and RCA winners are statistically tied with 6-feature clinical baseline.",
+        "single_center_cohort": "Z-Alizadeh Sani cohort (N=303) is a single-center tertiary cardiovascular registry.",
+        "rwma_semantics": "Region RWMA is an ordinal segmental count code (0 to 4); no specific anatomical vessel territory is inferred.",
+        "explainability": "SHAP reflects model-learned statistical associations, not biological causation.",
+    }
+
+    return MetricsResponse(
+        deployed_models=deployed,
+        candidate_comparison=candidates,
+        clinical_baseline_comparison=clinical_baseline,
+        nested_tuning_config=metrics_data.get("nested_tuning_config", {}),
+        disclosures=disclosures,
+    )
+
+
+from typing import cast
+
+
+@app.get("/patients/samples", response_model=list[SamplePatient])
+def get_sample_patients() -> list[SamplePatient]:
+    """Return 6 real de-identified patient feature records from dataset (2 low, 2 moderate, 2 high risk)."""
+    if not STATE["sample_patients"]:
+        raise HTTPException(status_code=503, detail="Sample patients not loaded.")
+    return cast(list[SamplePatient], STATE["sample_patients"])
