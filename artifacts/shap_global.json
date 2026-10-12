@@ -1,0 +1,458 @@
+{
+  "y_cad": {
+    "top_10_features": [
+      {
+        "rank": 1,
+        "feature": "Typical Chest Pain",
+        "mean_abs_shap": 0.12167
+      },
+      {
+        "rank": 2,
+        "feature": "Atypical",
+        "mean_abs_shap": 0.04903
+      },
+      {
+        "rank": 3,
+        "feature": "Region RWMA",
+        "mean_abs_shap": 0.04303
+      },
+      {
+        "rank": 4,
+        "feature": "Age",
+        "mean_abs_shap": 0.04206
+      },
+      {
+        "rank": 5,
+        "feature": "HTN",
+        "mean_abs_shap": 0.03146
+      },
+      {
+        "rank": 6,
+        "feature": "EF-TTE",
+        "mean_abs_shap": 0.02924
+      },
+      {
+        "rank": 7,
+        "feature": "TG",
+        "mean_abs_shap": 0.02389
+      },
+      {
+        "rank": 8,
+        "feature": "FBS",
+        "mean_abs_shap": 0.02174
+      },
+      {
+        "rank": 9,
+        "feature": "Tinversion",
+        "mean_abs_shap": 0.0188
+      },
+      {
+        "rank": 10,
+        "feature": "DM",
+        "mean_abs_shap": 0.01449
+      }
+    ],
+    "all_features_shap": {
+      "Typical Chest Pain": 0.12167,
+      "Atypical": 0.04903,
+      "Region RWMA": 0.04303,
+      "Age": 0.04206,
+      "HTN": 0.03146,
+      "EF-TTE": 0.02924,
+      "TG": 0.02389,
+      "FBS": 0.02174,
+      "Tinversion": 0.0188,
+      "DM": 0.01449,
+      "K": 0.01435,
+      "ESR": 0.01381,
+      "Neut": 0.01171,
+      "BP": 0.01132,
+      "BMI": 0.01129,
+      "Lymph": 0.00838,
+      "CR": 0.00805,
+      "Nonanginal": 0.00774,
+      "PR": 0.00774,
+      "Weight": 0.00655,
+      "HB": 0.00629,
+      "Na": 0.00551,
+      "PLT": 0.00517,
+      "WBC": 0.005,
+      "LDL": 0.00437,
+      "Dyspnea": 0.00429,
+      "VHD_Severe": 0.00373,
+      "Length": 0.00348,
+      "BUN": 0.00348,
+      "HDL": 0.00341,
+      "Function Class": 0.00256,
+      "Current Smoker": 0.00245,
+      "Diastolic Murmur": 0.00194,
+      "Q Wave": 0.00188,
+      "St Depression": 0.00176,
+      "Sex": 0.00148,
+      "VHD_mild": 0.00148,
+      "FH": 0.00126,
+      "DLP": 0.00118,
+      "Obesity": 0.00118,
+      "VHD_N": 0.00114,
+      "Poor R Progression": 0.00113,
+      "St Elevation": 0.00097,
+      "Lung rales": 0.00078,
+      "Systolic Murmur": 0.00075,
+      "BBB_N": 0.00056,
+      "Edema": 0.00042,
+      "CVA": 0.00034,
+      "Airway disease": 0.00027,
+      "BBB_RBBB": 0.00025,
+      "CRF": 0.00019,
+      "LVH": 0.00017,
+      "EX-Smoker": 0.00016,
+      "Thyroid Disease": 9e-05,
+      "LowTH Ang": 8e-05,
+      "CHF": 0.0,
+      "Weak Peripheral Pulse": 0.0,
+      "Exertional CP": 0.0
+    }
+  },
+  "y_lad": {
+    "top_10_features": [
+      {
+        "rank": 1,
+        "feature": "Typical Chest Pain",
+        "mean_abs_shap": 0.08949
+      },
+      {
+        "rank": 2,
+        "feature": "Region RWMA",
+        "mean_abs_shap": 0.0525
+      },
+      {
+        "rank": 3,
+        "feature": "Age",
+        "mean_abs_shap": 0.03326
+      },
+      {
+        "rank": 4,
+        "feature": "EF-TTE",
+        "mean_abs_shap": 0.03108
+      },
+      {
+        "rank": 5,
+        "feature": "Atypical",
+        "mean_abs_shap": 0.02932
+      },
+      {
+        "rank": 6,
+        "feature": "ESR",
+        "mean_abs_shap": 0.02165
+      },
+      {
+        "rank": 7,
+        "feature": "Neut",
+        "mean_abs_shap": 0.01588
+      },
+      {
+        "rank": 8,
+        "feature": "Tinversion",
+        "mean_abs_shap": 0.0157
+      },
+      {
+        "rank": 9,
+        "feature": "Lymph",
+        "mean_abs_shap": 0.01318
+      },
+      {
+        "rank": 10,
+        "feature": "TG",
+        "mean_abs_shap": 0.01256
+      }
+    ],
+    "all_features_shap": {
+      "Typical Chest Pain": 0.08949,
+      "Region RWMA": 0.0525,
+      "Age": 0.03326,
+      "EF-TTE": 0.03108,
+      "Atypical": 0.02932,
+      "ESR": 0.02165,
+      "Neut": 0.01588,
+      "Tinversion": 0.0157,
+      "Lymph": 0.01318,
+      "TG": 0.01256,
+      "BMI": 0.01037,
+      "FBS": 0.01013,
+      "WBC": 0.00989,
+      "LDL": 0.00885,
+      "HTN": 0.00782,
+      "CR": 0.00768,
+      "PR": 0.00751,
+      "BP": 0.00701,
+      "HDL": 0.00678,
+      "Weight": 0.00658,
+      "Nonanginal": 0.00643,
+      "K": 0.006,
+      "Na": 0.006,
+      "BUN": 0.00563,
+      "PLT": 0.00551,
+      "HB": 0.00502,
+      "St Depression": 0.00498,
+      "Length": 0.00478,
+      "Dyspnea": 0.00382,
+      "Sex": 0.00378,
+      "VHD_Severe": 0.00312,
+      "DM": 0.00303,
+      "Q Wave": 0.0027,
+      "DLP": 0.00247,
+      "VHD_N": 0.00214,
+      "St Elevation": 0.00214,
+      "VHD_mild": 0.00124,
+      "Edema": 0.00118,
+      "Obesity": 0.00113,
+      "Function Class": 0.00106,
+      "EX-Smoker": 0.00098,
+      "CVA": 0.00096,
+      "Diastolic Murmur": 0.00094,
+      "FH": 0.00094,
+      "Poor R Progression": 0.00074,
+      "Systolic Murmur": 0.00071,
+      "Current Smoker": 0.00066,
+      "Lung rales": 0.00065,
+      "LVH": 0.00042,
+      "Thyroid Disease": 0.00036,
+      "BBB_N": 0.00034,
+      "Weak Peripheral Pulse": 0.00025,
+      "Airway disease": 0.00024,
+      "LowTH Ang": 0.00023,
+      "CRF": 0.00022,
+      "BBB_RBBB": 0.00021,
+      "CHF": 0.0,
+      "Exertional CP": 0.0
+    }
+  },
+  "y_lcx": {
+    "top_10_features": [
+      {
+        "rank": 1,
+        "feature": "Age",
+        "mean_abs_shap": 0.51227
+      },
+      {
+        "rank": 2,
+        "feature": "Typical Chest Pain",
+        "mean_abs_shap": 0.46311
+      },
+      {
+        "rank": 3,
+        "feature": "TG",
+        "mean_abs_shap": 0.29565
+      },
+      {
+        "rank": 4,
+        "feature": "CR",
+        "mean_abs_shap": 0.24629
+      },
+      {
+        "rank": 5,
+        "feature": "FBS",
+        "mean_abs_shap": 0.21613
+      },
+      {
+        "rank": 6,
+        "feature": "PLT",
+        "mean_abs_shap": 0.21024
+      },
+      {
+        "rank": 7,
+        "feature": "Na",
+        "mean_abs_shap": 0.18557
+      },
+      {
+        "rank": 8,
+        "feature": "Length",
+        "mean_abs_shap": 0.18443
+      },
+      {
+        "rank": 9,
+        "feature": "HDL",
+        "mean_abs_shap": 0.17847
+      },
+      {
+        "rank": 10,
+        "feature": "BMI",
+        "mean_abs_shap": 0.1629
+      }
+    ],
+    "all_features_shap": {
+      "Age": 0.51227,
+      "Typical Chest Pain": 0.46311,
+      "TG": 0.29565,
+      "CR": 0.24629,
+      "FBS": 0.21613,
+      "PLT": 0.21024,
+      "Na": 0.18557,
+      "Length": 0.18443,
+      "HDL": 0.17847,
+      "BMI": 0.1629,
+      "LDL": 0.1252,
+      "BUN": 0.11966,
+      "Weight": 0.1073,
+      "ESR": 0.0952,
+      "HB": 0.09323,
+      "Lymph": 0.09247,
+      "BP": 0.09161,
+      "K": 0.08907,
+      "Neut": 0.06407,
+      "WBC": 0.05751,
+      "VHD_mild": 0.05456,
+      "EF-TTE": 0.05217,
+      "HTN": 0.04253,
+      "DLP": 0.04211,
+      "Current Smoker": 0.03023,
+      "VHD_N": 0.00835,
+      "DM": 0.00763,
+      "Sex": 0.00626,
+      "PR": 0.00616,
+      "Region RWMA": 0.00605,
+      "EX-Smoker": 0.0,
+      "Lung rales": 0.0,
+      "Tinversion": 0.0,
+      "St Depression": 0.0,
+      "St Elevation": 0.0,
+      "Q Wave": 0.0,
+      "LowTH Ang": 0.0,
+      "Exertional CP": 0.0,
+      "Nonanginal": 0.0,
+      "Atypical": 0.0,
+      "Dyspnea": 0.0,
+      "Diastolic Murmur": 0.0,
+      "Systolic Murmur": 0.0,
+      "Weak Peripheral Pulse": 0.0,
+      "LVH": 0.0,
+      "Edema": 0.0,
+      "CHF": 0.0,
+      "Thyroid Disease": 0.0,
+      "Airway disease": 0.0,
+      "CVA": 0.0,
+      "CRF": 0.0,
+      "Function Class": 0.0,
+      "BBB_N": 0.0,
+      "BBB_RBBB": 0.0,
+      "Obesity": 0.0,
+      "VHD_Severe": 0.0,
+      "FH": 0.0,
+      "Poor R Progression": 0.0
+    }
+  },
+  "y_rca": {
+    "top_10_features": [
+      {
+        "rank": 1,
+        "feature": "Typical Chest Pain",
+        "mean_abs_shap": 0.03266
+      },
+      {
+        "rank": 2,
+        "feature": "ESR",
+        "mean_abs_shap": 0.03124
+      },
+      {
+        "rank": 3,
+        "feature": "Neut",
+        "mean_abs_shap": 0.02997
+      },
+      {
+        "rank": 4,
+        "feature": "Age",
+        "mean_abs_shap": 0.02888
+      },
+      {
+        "rank": 5,
+        "feature": "Lymph",
+        "mean_abs_shap": 0.02864
+      },
+      {
+        "rank": 6,
+        "feature": "DM",
+        "mean_abs_shap": 0.02478
+      },
+      {
+        "rank": 7,
+        "feature": "Atypical",
+        "mean_abs_shap": 0.02169
+      },
+      {
+        "rank": 8,
+        "feature": "FBS",
+        "mean_abs_shap": 0.01666
+      },
+      {
+        "rank": 9,
+        "feature": "WBC",
+        "mean_abs_shap": 0.01351
+      },
+      {
+        "rank": 10,
+        "feature": "TG",
+        "mean_abs_shap": 0.01281
+      }
+    ],
+    "all_features_shap": {
+      "Typical Chest Pain": 0.03266,
+      "ESR": 0.03124,
+      "Neut": 0.02997,
+      "Age": 0.02888,
+      "Lymph": 0.02864,
+      "DM": 0.02478,
+      "Atypical": 0.02169,
+      "FBS": 0.01666,
+      "WBC": 0.01351,
+      "TG": 0.01281,
+      "Na": 0.01225,
+      "Length": 0.01169,
+      "Weight": 0.0098,
+      "BMI": 0.00905,
+      "HTN": 0.00899,
+      "K": 0.00881,
+      "CR": 0.00849,
+      "HB": 0.00776,
+      "PLT": 0.00716,
+      "EF-TTE": 0.00694,
+      "Sex": 0.00677,
+      "Function Class": 0.00629,
+      "HDL": 0.00609,
+      "LDL": 0.00603,
+      "PR": 0.006,
+      "BP": 0.00559,
+      "BUN": 0.00514,
+      "Dyspnea": 0.00462,
+      "Nonanginal": 0.00401,
+      "Tinversion": 0.00289,
+      "Region RWMA": 0.00289,
+      "VHD_N": 0.00265,
+      "Poor R Progression": 0.00246,
+      "Q Wave": 0.00152,
+      "Current Smoker": 0.00143,
+      "FH": 0.00126,
+      "DLP": 0.00125,
+      "VHD_mild": 0.00117,
+      "St Depression": 0.00115,
+      "BBB_N": 0.00092,
+      "Systolic Murmur": 0.00088,
+      "BBB_RBBB": 0.00083,
+      "Diastolic Murmur": 0.00083,
+      "CVA": 0.00067,
+      "Obesity": 0.0006,
+      "St Elevation": 0.00056,
+      "VHD_Severe": 0.00049,
+      "LVH": 0.00047,
+      "Lung rales": 0.00043,
+      "Edema": 0.00031,
+      "Airway disease": 0.00027,
+      "Thyroid Disease": 0.00023,
+      "EX-Smoker": 0.00023,
+      "CRF": 0.00017,
+      "Weak Peripheral Pulse": 9e-05,
+      "CHF": 8e-05,
+      "LowTH Ang": 7e-05,
+      "Exertional CP": 0.0
+    }
+  }
+}

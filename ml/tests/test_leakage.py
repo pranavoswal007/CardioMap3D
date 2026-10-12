@@ -101,3 +101,20 @@ def test_forbidden_target_names_constant() -> None:
     """Verify FORBIDDEN_TARGET_NAMES contains exactly the five specified targets."""
     assert set(FORBIDDEN_TARGET_NAMES) == {"LAD", "LCX", "RCA", "Cath", "CAD"}
     assert len(FORBIDDEN_TARGET_NAMES) == 5
+
+
+@pytest.mark.parametrize(
+    "annotated_header",
+    [
+        "LAD (Target)",
+        "Cath (Target / Overall CAD outcome)",
+        "LCX (Target vessel)",
+        "RCA (stenosis outcome)",
+        "CAD (binary outcome)",
+    ],
+)
+def test_annotated_target_headers_rejected(annotated_header: str) -> None:
+    """Verify that annotated headers with parenthetical notes are still strictly rejected."""
+    with pytest.raises(AssertionError, match="CRITICAL TARGET LEAKAGE DETECTED"):
+        assert_no_target_leakage(["Age", "Sex", annotated_header])
+

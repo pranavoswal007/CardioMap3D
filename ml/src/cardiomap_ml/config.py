@@ -2,6 +2,7 @@
 
 import os
 import random
+import re
 from collections.abc import Sequence
 
 import numpy as np
@@ -9,16 +10,37 @@ import numpy as np
 # Global deterministic random seed (Hard rule 7)
 RANDOM_SEED: int = 42
 
-# Primary target prediction columns
-TARGET_COLUMNS: tuple[str, ...] = ("Cath", "LAD", "LCX", "RCA")
+# Primary raw target columns in z_alizadeh_sani_extension.xlsx
+RAW_TARGET_COLUMNS: tuple[str, ...] = ("Cath", "LAD", "LCX", "RCA")
+
+# Backward compatibility alias
+TARGET_COLUMNS: tuple[str, ...] = RAW_TARGET_COLUMNS
+
+# Target column mapping from raw header to standardized model target name
+TARGET_COLUMN_MAP: dict[str, str] = {
+    "Cath": "y_cad",
+    "LAD": "y_lad",
+    "LCX": "y_lcx",
+    "RCA": "y_rca",
+}
+
+# Binary encodings for targets (1 = positive/stenotic/CAD, 0 = normal)
+TARGET_ENCODINGS: dict[str, dict[str, int]] = {
+    "Cath": {"CAD": 1, "Normal": 0},
+    "LAD": {"Stenotic": 1, "Normal": 0},
+    "LCX": {"Stenotic": 1, "Normal": 0},
+    "RCA": {"Stenotic": 1, "Normal": 0},
+}
 
 # Exact forbidden target set: LAD, LCX, RCA, Cath, plus target label CAD
 FORBIDDEN_TARGET_NAMES: tuple[str, ...] = ("LAD", "LCX", "RCA", "Cath", "CAD")
 
 
 def normalize_column_name(name: str) -> str:
-    """Normalize a column name by stripping whitespace, lowercasing, and removing separators."""
-    return name.strip().lower().replace("_", "").replace("-", "").replace(" ", "")
+    """Normalize a column name by stripping parenthetical notes, whitespace, lowercasing, and removing separators."""
+    # Strip parenthetical annotations like '(Target)' or '(vessel)'
+    cleaned = re.sub(r"\(.*?\)", "", name)
+    return cleaned.strip().lower().replace("_", "").replace("-", "").replace(" ", "")
 
 
 # Normalized set of forbidden target names for leak-checking

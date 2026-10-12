@@ -23,6 +23,7 @@ dependencies = [
     "pydantic>=2.6.0",
     "pydantic-settings>=2.2.0",
     "pyyaml>=6.0.1",
+    "matplotlib>=3.8.0",
     "onnx>=1.15.0",
     "onnxruntime>=1.17.0",
     "skl2onnx>=1.16.0",
