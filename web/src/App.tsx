@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { HeartCanvas } from './components/HeartCanvas';
 import {
   Activity,
   Heart,
@@ -11,12 +10,40 @@ import {
   Cpu,
   Layers
 } from 'lucide-react';
+import type { VesselId, VesselData } from './types/viewer';
+
+// Lazy-load the heavy 3D viewer bundle for optimal page performance
+const HeartViewer = React.lazy(() => import('./components/HeartViewer'));
+
+function HeartViewerFallback() {
+  return (
+    <div className="w-full h-[520px] md:h-[580px] rounded-2xl bg-slate-900/80 border border-slate-800 flex flex-col items-center justify-center gap-3 text-slate-400">
+      <div className="relative">
+        <Heart className="w-10 h-10 text-rose-500/40 animate-pulse" />
+      </div>
+      <div className="text-xs font-medium text-slate-300">
+        Initializing 3D Cardiac Anatomy Engine...
+      </div>
+      <div className="text-[11px] text-slate-500">
+        Loading WebGL Shaders & Spline Geometries
+      </div>
+    </div>
+  );
+}
 
 export function App() {
   const [apiStatus, setApiStatus] = useState<'checking' | 'online' | 'offline'>('checking');
+  const [selectedVessel, setSelectedVessel] = useState<VesselId | null>(null);
+
+  // Default unpredicted vessel state (Phase 4 will wire live API predictions)
+  const [vessels] = useState<Record<VesselId, VesselData>>({
+    lad: null,
+    lcx: null,
+    rca: null,
+  });
 
   React.useEffect(() => {
-    // Check API health endpoint
+    // Verify API health endpoint
     fetch('http://localhost:8000/health')
       .then((res) => {
         if (res.ok) setApiStatus('online');
@@ -27,7 +54,7 @@ export function App() {
 
   return (
     <div className="flex flex-col min-h-screen bg-[#070b13] text-slate-100 font-sans">
-      {/* 1. MANDATORY CLINICAL DISCLAIMER BANNER (Hard Rule 5) */}
+      {/* 1. MANDATORY CLINICAL DISCLAIMER BANNER */}
       <div className="w-full bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 flex items-center justify-center gap-2 text-xs md:text-sm text-amber-300 z-50 sticky top-0 backdrop-blur-md">
         <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0" />
         <span className="font-semibold tracking-wide uppercase text-amber-400">Clinical Decision Support Only:</span>
@@ -46,7 +73,7 @@ export function App() {
             <div className="flex items-center gap-2">
               <h1 className="text-lg font-bold tracking-tight text-white">CardioMap 3D</h1>
               <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-sky-500/20 text-sky-300 border border-sky-500/30">
-                Phase 0 Scaffold
+                Phase 3: 3D Heart Viewer
               </span>
               <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-rose-500/20 text-rose-300 border border-rose-500/30">
                 Track A: Multimodal AI 2026
@@ -64,11 +91,11 @@ export function App() {
             <span className="text-slate-400">API Status:</span>
             {apiStatus === 'online' ? (
               <span className="flex items-center gap-1.5 font-medium text-emerald-400">
-                <span className="w-2 h-2 rounded-full bg-emerald-400"></span> Online
+                <span className="w-2 h-2 rounded-full bg-emerald-400" /> Online
               </span>
             ) : apiStatus === 'offline' ? (
               <span className="flex items-center gap-1.5 font-medium text-rose-400">
-                <span className="w-2 h-2 rounded-full bg-rose-400"></span> Disconnected
+                <span className="w-2 h-2 rounded-full bg-rose-400" /> Disconnected
               </span>
             ) : (
               <span className="flex items-center gap-1.5 font-medium text-amber-400">
@@ -100,7 +127,13 @@ export function App() {
           </div>
 
           <div className="flex-1 min-h-[540px]">
-            <HeartCanvas />
+            <React.Suspense fallback={<HeartViewerFallback />}>
+              <HeartViewer
+                vessels={vessels}
+                selectedVessel={selectedVessel}
+                onSelectVessel={setSelectedVessel}
+              />
+            </React.Suspense>
           </div>
         </section>
 
@@ -113,30 +146,31 @@ export function App() {
                 <Activity className="w-4 h-4 text-rose-400" />
                 <h3 className="font-semibold text-slate-100 text-sm">Patient Coronary Artery Assessment</h3>
               </div>
-              <span className="px-2 py-0.5 rounded text-xs font-mono bg-red-950/80 text-red-300 border border-red-800">
-                CAD Positive (Predicted)
+              <span className="px-2.5 py-0.5 rounded text-xs font-mono bg-slate-800 text-slate-400 border border-slate-700">
+                Awaiting Assessment
               </span>
             </div>
-            {/* TODO(PHASE 3): REMOVE hardcoded placeholder, replace with API-driven values */}
+
+            {/* Vessel Status Cards (Neutral empty state) */}
             <div className="grid grid-cols-3 gap-3 my-4">
               <div className="p-3 rounded-lg bg-slate-950 border border-slate-800/80">
                 <div className="text-[11px] text-slate-400 font-medium">LAD Vessel</div>
-                <div className="text-xl font-bold font-mono text-red-400 mt-1">78.2%</div>
-                <div className="text-[10px] text-red-400/80 mt-0.5">High Stenosis Risk</div>
+                <div className="text-xl font-bold font-mono text-slate-400 mt-1">&mdash;</div>
+                <div className="text-[10px] text-slate-500 mt-0.5">Awaiting prediction</div>
               </div>
               <div className="p-3 rounded-lg bg-slate-950 border border-slate-800/80">
                 <div className="text-[11px] text-slate-400 font-medium">RCA Vessel</div>
-                <div className="text-xl font-bold font-mono text-amber-400 mt-1">52.4%</div>
-                <div className="text-[10px] text-amber-400/80 mt-0.5">Moderate Stenosis Risk</div>
+                <div className="text-xl font-bold font-mono text-slate-400 mt-1">&mdash;</div>
+                <div className="text-[10px] text-slate-500 mt-0.5">Awaiting prediction</div>
               </div>
               <div className="p-3 rounded-lg bg-slate-950 border border-slate-800/80">
                 <div className="text-[11px] text-slate-400 font-medium">LCX Vessel</div>
-                <div className="text-xl font-bold font-mono text-emerald-400 mt-1">24.1%</div>
-                <div className="text-[10px] text-emerald-400/80 mt-0.5">Low Stenosis Risk</div>
+                <div className="text-xl font-bold font-mono text-slate-400 mt-1">&mdash;</div>
+                <div className="text-[10px] text-slate-500 mt-0.5">Awaiting prediction</div>
               </div>
             </div>
             <p className="text-xs text-slate-400">
-              Calibrated out-of-fold probability estimates from multi-target ensemble model trained on Z-Alizadeh Sani cohort without target leakage.
+              Run a prediction to see results. Calibrated out-of-fold probability estimates from multi-target ensemble models will appear here after patient feature submission.
             </p>
           </div>
 
@@ -148,50 +182,16 @@ export function App() {
                 <h3 className="font-semibold text-slate-100 text-sm">SHAP Interpretability & Feature Attribution</h3>
               </div>
               <p className="text-xs text-slate-400 mb-4">
-                Local feature contributions to coronary stenosis predictions will be rendered in Phase 3 using TreeSHAP values.
+                Local feature contributions to coronary stenosis predictions will be rendered using SHAP values.
               </p>
 
-              {/* TODO(PHASE 3): REMOVE hardcoded placeholder, replace with API-driven values */}
-              <div className="space-y-2.5">
-                <div>
-                  <div className="flex justify-between text-xs mb-1">
-                    <span className="text-slate-300">Typical Chest Pain (CP)</span>
-                    <span className="text-red-400 font-mono font-medium">+0.34 SHAP</span>
-                  </div>
-                  <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
-                    <div className="h-full bg-red-500 rounded-full" style={{ width: '75%' }}></div>
-                  </div>
-                </div>
-
-                <div>
-                  <div className="flex justify-between text-xs mb-1">
-                    <span className="text-slate-300">Regional Wall Motion Abnormality (EF / RWMA)</span>
-                    <span className="text-red-400 font-mono font-medium">+0.28 SHAP</span>
-                  </div>
-                  <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
-                    <div className="h-full bg-red-500 rounded-full" style={{ width: '62%' }}></div>
-                  </div>
-                </div>
-
-                <div>
-                  <div className="flex justify-between text-xs mb-1">
-                    <span className="text-slate-300">ST-Segment Depression on ECG</span>
-                    <span className="text-red-400 font-mono font-medium">+0.22 SHAP</span>
-                  </div>
-                  <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
-                    <div className="h-full bg-red-500 rounded-full" style={{ width: '50%' }}></div>
-                  </div>
-                </div>
-
-                <div>
-                  <div className="flex justify-between text-xs mb-1">
-                    <span className="text-slate-300">High-Density Lipoprotein (HDL)</span>
-                    <span className="text-emerald-400 font-mono font-medium">-0.19 SHAP</span>
-                  </div>
-                  <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
-                    <div className="h-full bg-emerald-500 rounded-full" style={{ width: '42%' }}></div>
-                  </div>
-                </div>
+              {/* Neutral Empty State */}
+              <div className="flex flex-col items-center justify-center p-8 text-center rounded-xl bg-slate-950/60 border border-slate-800/80 my-2">
+                <BarChart2 className="w-8 h-8 text-slate-600 mb-2.5" />
+                <p className="text-sm font-medium text-slate-300">Run a prediction to see results</p>
+                <p className="text-xs text-slate-500 max-w-xs mt-1">
+                  Local SHAP values quantifying each clinical measurement's contribution will be computed once patient features are provided.
+                </p>
               </div>
             </div>
 
