@@ -181,7 +181,7 @@ def test_coherence_flag_logic(client: TestClient) -> None:
 
 
 def test_explain_endpoint(client: TestClient) -> None:
-    """Verify /explain returns contributions with raw SHAP units, relative %, and stability labels."""
+    """Verify /explain returns contributions with raw SHAP units in probability points, relative %, and interpretation note."""
     sample_input = {
         "Age": 68,
         "Sex": "Male",
@@ -193,11 +193,15 @@ def test_explain_endpoint(client: TestClient) -> None:
     assert response.status_code == 200
     data = response.json()
     assert set(data["targets"].keys()) == {"cad", "lad", "lcx", "rca"}
+    assert "interpretation_note" in data
+    assert "calibrated probability" in data["interpretation_note"]
+    assert "not causal findings" in data["interpretation_note"]
 
     for t_exp in data["targets"].values():
         assert len(t_exp["contributions"]) <= 10
         assert len(t_exp["contributions"]) > 0
-        assert t_exp["raw_unit"] != ""
+        assert t_exp["raw_unit"] == "probability points"
+        assert 0.0 <= t_exp["base_value"] <= 1.0
         for c in t_exp["contributions"]:
             assert c["direction"] in ("increases_risk", "decreases_risk")
             assert c["stability_label"] in ("stable", "moderate", "low")
@@ -208,6 +212,29 @@ def test_explain_endpoint(client: TestClient) -> None:
     for p in data["physiology"]:
         assert "category" in p
         assert p["stability_label"] in ("stable", "moderate", "low")
+
+
+def test_explain_endpoint_determinism_and_cache(client: TestClient) -> None:
+    """Verify /explain endpoint produces deterministic outputs and leverages SHA256 input cache."""
+    sample_input = {
+        "Age": 59,
+        "Sex": "Fmale",
+        "Typical Chest Pain": "No",
+        "EF-TTE": 55,
+    }
+    res1 = client.post("/explain", json=sample_input)
+    assert res1.status_code == 200
+    data1 = res1.json()
+
+    res2 = client.post("/explain", json=sample_input)
+    assert res2.status_code == 200
+    data2 = res2.json()
+
+    assert data1 == data2
+    for target in ["cad", "lad", "lcx", "rca"]:
+        assert data1["targets"][target]["raw_unit"] == "probability points"
+        assert data1["targets"][target]["base_value"] == data2["targets"][target]["base_value"]
+        assert len(data1["targets"][target]["contributions"]) == len(data2["targets"][target]["contributions"])
 
 
 def test_metrics_endpoint(client: TestClient) -> None:

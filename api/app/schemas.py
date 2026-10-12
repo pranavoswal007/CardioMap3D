@@ -70,7 +70,7 @@ class TargetExplanation(BaseModel):
     """Per-target explainability breakdown."""
 
     target: str
-    raw_unit: str = Field(description="Measurement unit for raw SHAP values")
+    raw_unit: str = Field(default="probability points", description="Measurement unit for raw SHAP values (probability points)")
     base_value: float = Field(description="Expected base score across reference background")
     contributions: list[FeatureExplanation] = Field(description="Top N local feature attributions")
 
@@ -93,6 +93,10 @@ class ExplainResponse(BaseModel):
     targets: dict[str, TargetExplanation] = Field(description="Explanations per target (cad, lad, lcx, rca)")
     physiology: list[PhysiologyItem] = Field(description="Key physiological measurement attributions for overall CAD")
     model_version: str
+    interpretation_note: str = Field(
+        default="Explanations describe the displayed calibrated probability in probability points and reflect model-learned associations, not causal findings.",
+        description="Clinical interpretation disclosure",
+    )
     disclaimer: str
 
 

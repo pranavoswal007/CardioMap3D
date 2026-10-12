@@ -79,6 +79,21 @@ Metrics computed on pooled out-of-fold predictions with empirical 95% bootstrap 
   - `y_rca`: Uncalibrated 0.1971 → Isotonic 0.2016 vs Sigmoid 0.2001.
 * **Probability Safety Bounds**: All inference probabilities are bounded to $[0.01, 0.99]$. No patient can ever receive a false certainty score ($0.0$ or $1.0$).
 
+### Trivial Baseline Comparison & Decision Threshold Calibration
+In clinical cohorts with class imbalance, comparing model operating points against the trivial "flag everyone positive" baseline is critical:
+
+| Target | Cohort Prevalence | Trivial Baseline $F_1$ (Flag Everyone) | Model $F_1$ @ Default 0.50 | Model Operating Cutoff ($t$) | Model $F_1$ @ Operating Cutoff ($t$) | $F_1$ Delta vs Trivial | Balanced Accuracy |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **`y_cad`** | **71.29%** (216 / 303) | 0.8324 | 0.9058 | **0.5377** | **0.9058** | **+0.0734** | 0.8614 |
+| **`y_lad`** | **58.42%** (177 / 303) | 0.7375 | 0.8373 | **0.5006** | **0.8373** | **+0.0998** | 0.7987 |
+| **`y_lcx`** | **39.27%** (119 / 303) | 0.5640 | 0.4674 | **0.3973** | **0.6020** | **+0.0380** | 0.6766 |
+| **`y_rca`** | **37.62%** (114 / 303) | 0.5468 | 0.4773 | **0.3354** | **0.6070** | **+0.0602** | 0.6964 |
+
+#### Clinical Context: Why LCX & RCA Thresholds Fall Near or Below Cohort Prevalence
+- For LCX and RCA, prevalence in this registry is ~38–39%. Uncalibrated 0.50 decision thresholds heavily penalize the positive class, producing low default $F_1$ scores (0.4674 and 0.4773) that underperform the trivial baseline.
+- Pre-catheterization screening requires high sensitivity to avoid missing treatable stenosis. Optimizing decision thresholds via Youden's $J$ and Max $F_1$ shifts the operating point to $0.3973$ (LCX) and $0.3354$ (RCA).
+- **Clinical Nuance**: Because the RCA operating threshold ($0.3354$) is below cohort prevalence ($37.62\%$), a patient receiving a "Moderate Risk" label ($t \le p < t + 0.15$) may have a calibrated probability near or below the average patient in the referred cohort. This reflects crossing a sensitive screening trigger, rather than possessing above-average cohort risk.
+
 ---
 
 ## 4. Phase 1.5 LCX & RCA Candidate Experiments
@@ -114,10 +129,21 @@ A key challenge identified in Phase 1 was that a simple 6-feature clinical logis
 
 ## 5. Explainability Audit & SHAP Stability Analysis
 
-### Unified Units & Additivity
-SHAP explanations are computed in raw score units and normalized relative contribution percentages ($\frac{|\text{shap}_i|}{\sum |\text{shap}|} \times 100$). Exact mathematical additivity was confirmed across all four production models:
-$$\text{base\_value} + \sum_{i=1}^{55} \text{shap}_i = \text{model\_raw\_output}$$
-*Note: The UI visualizes relative contributions (% impact), while the underlying API computes local contributions from the pre-calibration raw model score.*
+### Model-Agnostic Explainer on Deployed Calibrated Pipeline & Additivity
+In Phase 2.5, explanations were upgraded across all four targets to explain the **deployed function**: the final calibrated pipeline's `predict_proba` (prior to $[0.01, 0.99]$ safety clip) as a function of the 55 RAW input features using a single model-agnostic `shap.KernelExplainer` with a deterministic fixed seed (`np.random.seed(42)`).
+- **Background**: Stratified sample of 30 real patients (`shap_background_sample.csv`).
+- **Attribution Unit**: **Probability points** for all four targets (`raw_unit = "probability points"`).
+- **Base Value**: Mean predicted probability on the background sample.
+- **Exact Additivity**: Local attributions sum to $(P(\text{target}) - \text{base\_value})$ exactly down to numerical precision:
+  $$\text{base\_value} + \sum_{i=1}^{55} \text{shap}_i = P(\text{calibrated\_pipeline})$$
+- One-hot encoded dummy indicators (`VHD`, `BBB`) are grouped back into their parent raw clinical features.
+- **Signed Relative Contribution %**: Normalized signed contribution $\text{sign}(\text{shap}_i) \cdot \frac{|\text{shap}_i|}{\sum_{j} |\text{shap}_j|} \times 100\%$.
+- **Association vs. Causation**: Explanations describe the displayed calibrated probability in probability points and reflect model-learned associations within this dataset, **not causal findings**.
+- **Agreement with Legacy TreeExplainer**: Evaluated across 20 patients for tree targets:
+  - `y_lad` (Random Forest): 3.10 / 5 (62.0%) top-5 agreement
+  - `y_lcx` (LightGBM): 2.90 / 5 (58.0%) top-5 agreement
+  - `y_rca` (LGBM_Shallow): 3.65 / 5 (73.0%) top-5 agreement
+  Overall tree target agreement averages 64.3%, reflecting the progression from fold-0 uncalibrated tree margin scores to the full 5-fold calibrated probability pipeline.
 
 ### Top 10 SHAP Features and Stability Audit
 *Features are characterized neutrally as **"model-learned associations, not causal findings"**. Ranking stability was evaluated across 20 bootstrap resamples:*

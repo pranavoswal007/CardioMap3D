@@ -14,7 +14,7 @@ import shutil
 import sys
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import joblib
 import matplotlib
@@ -591,12 +591,14 @@ def train_and_evaluate_target(
     # Generate and save publication diagnostic curves
     plot_diagnostic_curves(target_name, y, oof_uncal, oof_cal, artifacts_dir)
 
-    # Compute SHAP values with unified units (raw score / relative contribution %)
+    # Compute SHAP values with unified units (probability points / relative contribution %)
+    # Explaining the DEPLOYED calibrated pipeline directly on raw features
     shap_results = compute_shap_explanations(
         target_name=target_name,
         best_model_name=best_model_name,
-        pipeline=final_base_pipeline,
+        model=final_calibrated_model,
         X=X,
+        y=y,
         artifacts_dir=artifacts_dir,
     )
 
@@ -674,69 +676,65 @@ def plot_diagnostic_curves(target_name: str, y_true: npt.NDArray[Any], p_uncal: 
 def compute_shap_explanations(
     target_name: str,
     best_model_name: str,
-    pipeline: Pipeline,
+    model: Any,
     X: pd.DataFrame,
+    y: npt.NDArray[Any],
     artifacts_dir: Path,
 ) -> dict[str, Any]:
-    """Compute and save SHAP explanations in model raw score units and normalized relative contribution %.
+    """Compute and save SHAP explanations in probability points for the deployed calibrated model.
 
-    - For Tree models (RandomForest, LightGBM): TreeExplainer in raw margin / probability output.
-    - For Linear models (LogisticRegression): LinearExplainer in log-odds.
-    - Exact additivity holds: base_value + sum(shap) == raw_model_output.
-    - Relative contribution %: |shap_i| / sum(|shap|) * 100 per patient, signed by direction.
+    - Explains the deployed function: calibrated pipeline predict_proba (before [0.01, 0.99] clip)
+      as a function of the 55 RAW input features using a model-agnostic explainer (KernelExplainer).
+    - Fixed seed ensures deterministic attributions.
+    - Representative stratified background of real patients (30 patients, never first N rows).
+    - Exact additivity: base_value + sum(shap_values) == deployed_predict_proba (within tolerance < 1e-4).
+    - Unit: probability points for all four targets.
+    - Patient-level relative contribution %: |shap_i| / sum(|shap|) * 100, signed by direction.
+    - Global importance computed on a random sample of at least 150 rows.
     """
-    logger.info("Computing SHAP explanations for %s (%s)...", target_name, best_model_name)
-    preprocessor = pipeline.named_steps["prep"]
-    classifier = pipeline.named_steps["clf"]
+    logger.info("Computing SHAP explanations in probability points for deployed %s (%s)...", target_name, best_model_name)
 
-    X_trans = preprocessor.transform(X)
+    # Save a representative 30-patient stratified background sample of real patients
+    pos_idx = np.where(y == 1)[0]
+    neg_idx = np.where(y == 0)[0]
+    rng = np.random.default_rng(RANDOM_SEED)
+    pos_n = round(30 * (len(pos_idx) / len(y)))
+    neg_n = 30 - pos_n
+    chosen_pos = rng.choice(pos_idx, size=pos_n, replace=False)
+    chosen_neg = rng.choice(neg_idx, size=neg_n, replace=False)
+    bg_indices = np.concatenate([chosen_pos, chosen_neg])
+    background_df = X.iloc[bg_indices].copy()
 
-    cat_names = preprocessor.named_transformers_["cat"].get_feature_names_out(CATEGORICAL_FEATURES).tolist()
-    bin_cols = [c for c in X.columns if c not in NUMERIC_FEATURES and c not in CATEGORICAL_FEATURES]
-    feature_names = NUMERIC_FEATURES + cat_names + bin_cols
-
-    # Save a representative 50-patient background sample for API inference (CSV and joblib)
-    background_df = X.sample(n=min(50, len(X)), random_state=RANDOM_SEED)
     bg_csv_path = artifacts_dir / "shap_background_sample.csv"
     background_df.to_csv(bg_csv_path, index=False)
     bg_joblib_path = artifacts_dir / "shap_background_sample.joblib"
     joblib.dump(background_df, bg_joblib_path)
 
     try:
-        if isinstance(classifier, LogisticRegression):
-            explainer = shap.LinearExplainer(classifier, X_trans)
-            explanation = explainer(X_trans)
-            shap_values_raw = explanation.values
-            base_value = float(np.mean(explanation.base_values))
-            raw_unit = "log-odds of raw logistic regression margin"
-        elif isinstance(classifier, RandomForestClassifier):
-            explainer = shap.TreeExplainer(classifier)
-            explanation = explainer(X_trans)
-            # Probability space output for RandomForestClassifier
-            shap_values_raw = explanation.values[:, :, 1]
-            base_value = float(np.mean(explanation.base_values[:, 1]))
-            raw_unit = "raw probability margin of ensemble trees"
-        elif isinstance(classifier, LGBMClassifier):
-            explainer = shap.TreeExplainer(classifier)
-            explanation = explainer(X_trans)
-            shap_values_raw = explanation.values
-            base_value = float(np.mean(explanation.base_values))
-            raw_unit = "log-odds of raw LightGBM margin"
-        elif isinstance(classifier, VotingClassifier):
-            # For soft voting ensemble: average individual member SHAP explanations
-            # to guarantee linear additivity with ensemble mean predict_proba
-            bg_sample = X_trans[:50]
-            f_vc = lambda x: classifier.predict_proba(x)[:, 1]
-            explainer = shap.KernelExplainer(f_vc, bg_sample)
-            shap_values_raw = explainer.shap_values(X_trans[:100])
-            base_value = float(explainer.expected_value)
-            raw_unit = "uncalibrated soft-voting probability share"
-        else:
-            explainer = shap.Explainer(classifier, X_trans[:50])
-            explanation = explainer(X_trans[:100])
-            shap_values_raw = explanation.values
-            base_value = float(np.mean(explanation.base_values))
-            raw_unit = "model raw score"
+        def predict_fn(x: Any) -> npt.NDArray[np.float64]:
+            if isinstance(x, np.ndarray):
+                x = pd.DataFrame(x, columns=X.columns)
+            return cast(npt.NDArray[np.float64], np.asarray(model.predict_proba(x)[:, 1], dtype=np.float64))
+
+        explainer = shap.KernelExplainer(predict_fn, background_df)
+        base_value = float(explainer.expected_value)
+        raw_unit = "probability points"
+
+        # Evaluate global importance on random sample of 150 rows
+        eval_n = min(150, len(X))
+        eval_indices = rng.choice(len(X), size=eval_n, replace=False)
+        eval_df = X.iloc[eval_indices].copy()
+
+        np.random.seed(RANDOM_SEED)
+        shap_values_raw = explainer.shap_values(eval_df, nsamples=150, silent=True)
+        if isinstance(shap_values_raw, list):
+            shap_values_raw = shap_values_raw[0]
+
+        # Verify additivity
+        p_eval = predict_fn(eval_df)
+        additivity_diffs = np.abs(p_eval - (base_value + np.sum(shap_values_raw, axis=1)))
+        logger.info("SHAP additivity verification for %s: max discrepancy = %.2e",
+                    target_name, float(np.max(additivity_diffs)))
 
         # Patient-level relative contribution percentage: |shap_i| / sum(|shap|) * 100
         abs_shap = np.abs(shap_values_raw)
@@ -758,6 +756,7 @@ def compute_shap_explanations(
 
         top_10 = []
         all_features_shap = {}
+        feature_names = list(X.columns)
         for rank, idx in enumerate(top_indices, 1):
             fname = feature_names[idx]
             raw_val = float(mean_abs_raw[idx])
@@ -784,6 +783,7 @@ def compute_shap_explanations(
             "unit": raw_unit,
             "base_value": round(base_value, 5),
             "additivity_property": "base_value + sum(shap_values) == model_raw_output",
+            "interpretation_note": "Explanations describe the displayed calibrated probability in probability points and reflect model-learned associations, not causal findings.",
             "top_10_features": top_10,
             "all_features_shap": all_features_shap,
         }

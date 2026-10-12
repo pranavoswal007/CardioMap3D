@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, cast
 
 import joblib
 import numpy as np
@@ -45,6 +46,10 @@ STATE: dict[str, Any] = {
     "shap_background": None,
     "explainers": {},
     "sample_patients": [],
+    "explain_cache": {},
+    "predict_cache": {},
+    "cache_hits": 0,
+    "cache_misses": 0,
 }
 
 TARGET_KEYS = ["cad", "lad", "lcx", "rca"]
@@ -160,28 +165,18 @@ def load_all_artifacts() -> None:
                                 sub.n_jobs = 1
                 STATE["models"][short_name] = calibrated_model
 
-                # Pre-initialize explainers on base estimator
-                base_pipe = calibrated_model.calibrated_classifiers_[0].estimator
-                preprocessor = base_pipe.named_steps["prep"]
-                classifier = base_pipe.named_steps["clf"]
-
+                # Pre-initialize unified model-agnostic explainer on DEPLOYED calibrated pipeline
                 if STATE["shap_background"] is not None:
-                    bg_trans = preprocessor.transform(STATE["shap_background"])
-                else:
-                    bg_trans = None
+                    bg_df = STATE["shap_background"]
+                    feat_cols = list(STATE["feature_schema"].keys())
 
-                if short_name == "cad":
-                    # Soft voting ensemble explainer
-                    if bg_trans is not None:
-                        clf_ref = classifier
-                        expl = shap.KernelExplainer(lambda x, c=clf_ref: c.predict_proba(x)[:, 1], bg_trans[:30])
-                        STATE["explainers"][short_name] = (preprocessor, expl, "uncalibrated soft-voting probability share")
-                elif short_name == "lad":
-                    expl = shap.TreeExplainer(classifier)
-                    STATE["explainers"][short_name] = (preprocessor, expl, "raw probability margin of ensemble trees")
-                elif short_name in ("lcx", "rca"):
-                    expl = shap.TreeExplainer(classifier)
-                    STATE["explainers"][short_name] = (preprocessor, expl, "log-odds of raw LightGBM margin")
+                    def make_predict_fn(mod: Any, cols: list[str]) -> Any:
+                        return lambda x: mod.predict_proba(
+                            x if isinstance(x, pd.DataFrame) else pd.DataFrame(x, columns=cols)
+                        )[:, 1]
+
+                    expl = shap.KernelExplainer(make_predict_fn(calibrated_model, feat_cols), bg_df)
+                    STATE["explainers"][short_name] = (expl, "probability points")
 
         # 7. Generate sample patients
         raw_data_path = settings.data_dir / "raw" / "z_alizadeh_sani_extension.xlsx"
@@ -393,6 +388,14 @@ def predict_stenosis_risk(patient_features: dict[str, Any]) -> PredictResponse:
     if not STATE["artifacts_ready"]:
         raise HTTPException(status_code=503, detail="Model artifacts not ready.")
 
+    # Input hash cache check
+    norm_dict = {k: to_python_primitive(v) for k, v in sorted(patient_features.items())}
+    cache_key = hashlib.sha256(json.dumps(norm_dict, sort_keys=True).encode("utf-8")).hexdigest()
+    if cache_key in STATE["predict_cache"]:
+        STATE["cache_hits"] += 1
+        return cast(PredictResponse, STATE["predict_cache"][cache_key])
+    STATE["cache_misses"] += 1
+
     df_patient, imputed_fields, warnings = validate_and_prepare_input(patient_features)
 
     # 1. Predictions per target in parallel
@@ -424,7 +427,7 @@ def predict_stenosis_risk(patient_features: dict[str, Any]) -> PredictResponse:
         ),
     }
 
-    return PredictResponse(
+    response = PredictResponse(
         cad=cad_pred,
         vessels=vessel_preds,
         coherence=coherence_info,
@@ -433,6 +436,10 @@ def predict_stenosis_risk(patient_features: dict[str, Any]) -> PredictResponse:
         model_version=settings.app_version,
         disclaimer=settings.disclaimer,
     )
+    if len(STATE["predict_cache"]) >= 500:
+        STATE["predict_cache"].pop(next(iter(STATE["predict_cache"])))
+    STATE["predict_cache"][cache_key] = response
+    return response
 
 
 @app.post("/explain", response_model=ExplainResponse)
@@ -440,6 +447,14 @@ def explain_stenosis_prediction(patient_features: dict[str, Any], top_n: int = 1
     """Compute local SHAP feature attributions in raw score and normalized relative contribution %."""
     if not STATE["artifacts_ready"]:
         raise HTTPException(status_code=503, detail="Model artifacts not ready.")
+
+    # Input hash cache check
+    norm_dict = {k: to_python_primitive(v) for k, v in sorted(patient_features.items())}
+    cache_key = hashlib.sha256(json.dumps(norm_dict, sort_keys=True).encode("utf-8")).hexdigest()
+    if cache_key in STATE["explain_cache"]:
+        STATE["cache_hits"] += 1
+        return cast(ExplainResponse, STATE["explain_cache"][cache_key])
+    STATE["cache_misses"] += 1
 
     df_patient, _, _ = validate_and_prepare_input(patient_features)
     schema = STATE["feature_schema"]
@@ -461,46 +476,25 @@ def explain_stenosis_prediction(patient_features: dict[str, Any], top_n: int = 1
         "ESR": "Inflammatory Biomarkers",
     }
 
-    for short_name, (preprocessor, explainer, raw_unit) in STATE["explainers"].items():
+    for short_name, (explainer, raw_unit) in STATE["explainers"].items():
         t_code = TARGET_MAP[short_name]
-        t_trans = preprocessor.transform(df_patient)
+        feature_names = list(df_patient.columns)
 
-        # Feature names after preprocessing
-        cat_names = preprocessor.named_transformers_["cat"].get_feature_names_out(["BBB", "VHD"]).tolist()
-        NUMERIC_FEATURES = [
-            "Age", "Weight", "Length", "BMI", "BP", "PR",
-            "FBS", "CR", "TG", "LDL", "HDL", "BUN", "ESR",
-            "HB", "K", "Na", "WBC", "Lymph", "Neut", "PLT",
-            "EF-TTE", "Function Class", "Region RWMA",
-        ]
-        bin_cols = [c for c in df_patient.columns if c not in NUMERIC_FEATURES and c not in ["BBB", "VHD"]]
-        feature_names = NUMERIC_FEATURES + cat_names + bin_cols
-
+        # Fixed seed guarantees deterministic attributions on repeated calls
+        np.random.seed(42)
         try:
-            if short_name == "cad":
-                # KernelExplainer on voting classifier
-                sv = explainer.shap_values(t_trans, nsamples=100)
-                if isinstance(sv, list):
-                    vals = sv[0]
-                else:
-                    vals = sv[0] if len(sv.shape) == 2 else sv
-                base_v = float(explainer.expected_value)
-            elif short_name == "lad":
-                # RandomForest TreeExplainer in probability space
-                exp_res = explainer(t_trans)
-                vals = exp_res.values[0, :, 1]
-                base_v = float(exp_res.base_values[0, 1])
+            sv = explainer.shap_values(df_patient, nsamples=150, silent=True)
+            if isinstance(sv, list):
+                vals = sv[0]
             else:
-                # LightGBM TreeExplainer in margin log-odds
-                exp_res = explainer(t_trans)
-                vals = exp_res.values[0]
-                base_v = float(exp_res.base_values[0])
+                vals = sv[0] if len(sv.shape) == 2 else sv
+            base_v = float(explainer.expected_value)
         except (ValueError, TypeError, RuntimeError) as e:
             logger.warning("SHAP calculation fallback for %s: %s", short_name, e)
             vals = np.zeros(len(feature_names))
             base_v = 0.5
 
-        # Compute normalized signed relative contribution %
+        # Compute normalized signed relative contribution %: signed |shap_i| / sum|shap|
         abs_vals = np.abs(vals)
         sum_abs = float(np.sum(abs_vals))
         if sum_abs < 1e-9:
@@ -516,9 +510,8 @@ def explain_stenosis_prediction(patient_features: dict[str, Any], top_n: int = 1
 
         for rank_idx, f_idx in enumerate(sorted_indices[:top_n], 1):
             fname = feature_names[f_idx]
-            clean_name = fname.split("_")[0] if ("_" in fname and fname not in schema) else fname
-            disp_label = schema.get(clean_name, {}).get("display_label", fname)
-            pat_v = to_python_primitive(df_patient[clean_name].iloc[0]) if clean_name in df_patient.columns else "Present"
+            disp_label = schema.get(fname, {}).get("display_label", fname)
+            pat_v = to_python_primitive(df_patient[fname].iloc[0])
 
             val_shap = float(vals[f_idx])
             val_pct = float(rel_pcts[f_idx])
@@ -562,12 +555,24 @@ def explain_stenosis_prediction(patient_features: dict[str, Any], top_n: int = 1
                         stability_label=f_stab_p,
                     ))
 
-    return ExplainResponse(
+    response = ExplainResponse(
         targets=target_explanations,
         physiology=physiology_items,
         model_version=settings.app_version,
-        disclaimer=settings.disclaimer,
+        interpretation_note=(
+            "Explanations describe the displayed calibrated probability in probability points "
+            "and reflect model-learned associations, not causal findings."
+        ),
+        disclaimer=(
+            "Explanations describe the displayed calibrated probability in probability points. "
+            "They reflect model-learned associations within this dataset, not causal findings. "
+            "Clinical decision support only; not a diagnostic medical device."
+        ),
     )
+    if len(STATE["explain_cache"]) >= 500:
+        STATE["explain_cache"].pop(next(iter(STATE["explain_cache"])))
+    STATE["explain_cache"][cache_key] = response
+    return response
 
 
 @app.get("/metrics", response_model=MetricsResponse)
@@ -610,9 +615,6 @@ def get_metrics_report() -> MetricsResponse:
         nested_tuning_config=metrics_data.get("nested_tuning_config", {}),
         disclosures=disclosures,
     )
-
-
-from typing import cast
 
 
 @app.get("/patients/samples", response_model=list[SamplePatient])
