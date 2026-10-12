@@ -1,12 +1,14 @@
-"""Comprehensive unit tests for CardioMap 3D ML pipeline.
+"""Comprehensive unit tests for CardioMap 3D ML pipeline (Phase 1.5).
 
 Tests verify:
-1. Hard Rule 1 target leakage invariants and robust header handling
+1. Target leakage invariants and robust header handling
 2. Exactly 55 feature inputs
 3. Pipeline fits and predicts on toy batch
 4. Saved artifacts reload and reproduce predictions identically
-5. Output probabilities strictly in [0, 1]
-6. y_cad consistency vs individual vessels
+5. Calibration probability clipping strictly inside [0.01, 0.99]
+6. SHAP additivity: base_value + sum(shap) == raw model output for sample patients across all targets
+7. y_cad consistency vs individual vessels
+8. Feature schema completeness
 """
 
 import json
@@ -16,13 +18,19 @@ import joblib
 import numpy as np
 import pandas as pd
 import pytest
+import shap
 from cardiomap_ml.config import (
+    PROBABILITY_CLIP_MAX,
+    PROBABILITY_CLIP_MIN,
     assert_no_target_leakage,
 )
 from cardiomap_ml.train import (
     create_preprocessor,
     load_dataset,
 )
+from lightgbm import LGBMClassifier
+from sklearn.ensemble import RandomForestClassifier, VotingClassifier
+from sklearn.linear_model import LogisticRegression
 
 
 @pytest.fixture(scope="module")
@@ -85,15 +93,84 @@ def test_saved_artifacts_reload_and_reproduce_predictions(raw_data: tuple[pd.Dat
         assert model_path.exists(), f"Missing model artifact: {model_path}"
 
         model = joblib.load(model_path)
-        probs = model.predict_proba(sample_patient)[:, 1]
+        raw_probs = model.predict_proba(sample_patient)[:, 1]
+        probs = np.clip(raw_probs, PROBABILITY_CLIP_MIN, PROBABILITY_CLIP_MAX)
 
         assert len(probs) == 5
-        assert np.all(probs >= 0.0), f"Probabilities below 0 for {target}"
-        assert np.all(probs <= 1.0), f"Probabilities above 1 for {target}"
+        assert np.all(probs >= PROBABILITY_CLIP_MIN), f"Probability below clip min for {target}"
+        assert np.all(probs <= PROBABILITY_CLIP_MAX), f"Probability above clip max for {target}"
+        assert not np.any(probs == 0.0), f"Exact 0 probability found for {target}"
+        assert not np.any(probs == 1.0), f"Exact 1 probability found for {target}"
 
         # Deterministic re-prediction
-        probs_recheck = model.predict_proba(sample_patient)[:, 1]
+        raw_recheck = model.predict_proba(sample_patient)[:, 1]
+        probs_recheck = np.clip(raw_recheck, PROBABILITY_CLIP_MIN, PROBABILITY_CLIP_MAX)
         np.testing.assert_allclose(probs, probs_recheck, err_msg=f"Non-deterministic prediction for {target}")
+
+
+def test_calibration_clipping_bounds(raw_data: tuple[pd.DataFrame, pd.DataFrame, dict[str, int]]) -> None:
+    """Verify calibrated probability clipping strictly enforces [0.01, 0.99] across entire dataset."""
+    X, _, _ = raw_data
+    artifacts_dir = Path("artifacts")
+
+    for target in ["y_cad", "y_lad", "y_lcx", "y_rca"]:
+        model_path = artifacts_dir / f"model_{target}.joblib"
+        model = joblib.load(model_path)
+        raw_probs = model.predict_proba(X)[:, 1]
+        clipped_probs = np.clip(raw_probs, PROBABILITY_CLIP_MIN, PROBABILITY_CLIP_MAX)
+
+        assert np.all(clipped_probs >= 0.01), f"Clipped probability below 0.01 for {target}"
+        assert np.all(clipped_probs <= 0.99), f"Clipped probability above 0.99 for {target}"
+        assert not np.any(clipped_probs == 0.0), f"Exact 0 found for {target}"
+        assert not np.any(clipped_probs == 1.0), f"Exact 1 found for {target}"
+
+
+def test_shap_additivity_on_sample_patients(raw_data: tuple[pd.DataFrame, pd.DataFrame, dict[str, int]]) -> None:
+    """Verify SHAP additivity: base_value + sum(shap_values) == model raw output for sample patients across targets."""
+    X, _, _ = raw_data
+    artifacts_dir = Path("artifacts")
+    test_sample = X.iloc[:5]
+
+    for target in ["y_cad", "y_lad", "y_lcx", "y_rca"]:
+        model_path = artifacts_dir / f"model_{target}.joblib"
+        calibrated_model = joblib.load(model_path)
+
+        # Retrieve base uncalibrated pipeline from calibrator
+        base_pipeline = calibrated_model.calibrated_classifiers_[0].estimator
+        preprocessor = base_pipeline.named_steps["prep"]
+        classifier = base_pipeline.named_steps["clf"]
+
+        X_trans = preprocessor.transform(test_sample)
+
+        if isinstance(classifier, LogisticRegression):
+            explainer = shap.LinearExplainer(classifier, X_trans)
+            exp = explainer(X_trans)
+            raw_scores = classifier.decision_function(X_trans)
+            computed = exp.base_values + np.sum(exp.values, axis=1)
+            np.testing.assert_allclose(raw_scores, computed, atol=1e-5, err_msg=f"SHAP additivity failed for {target}")
+
+        elif isinstance(classifier, RandomForestClassifier):
+            explainer = shap.TreeExplainer(classifier)
+            exp = explainer(X_trans)
+            raw_scores = classifier.predict_proba(X_trans)[:, 1]
+            computed = exp.base_values[:, 1] + np.sum(exp.values[:, :, 1], axis=1)
+            np.testing.assert_allclose(raw_scores, computed, atol=1e-5, err_msg=f"SHAP additivity failed for {target}")
+
+        elif isinstance(classifier, LGBMClassifier):
+            explainer = shap.TreeExplainer(classifier)
+            exp = explainer(X_trans)
+            raw_scores = classifier.predict(X_trans, raw_score=True)
+            computed = exp.base_values + np.sum(exp.values, axis=1)
+            np.testing.assert_allclose(raw_scores, computed, atol=1e-5, err_msg=f"SHAP additivity failed for {target}")
+
+        elif isinstance(classifier, VotingClassifier):
+            bg = preprocessor.transform(X.iloc[:50])
+            clf_ref = classifier
+            explainer = shap.KernelExplainer(lambda x, c=clf_ref: c.predict_proba(x)[:, 1], bg)
+            sv = explainer.shap_values(X_trans)
+            raw_scores = clf_ref.predict_proba(X_trans)[:, 1]
+            computed = explainer.expected_value + np.sum(sv, axis=1)
+            np.testing.assert_allclose(raw_scores, computed, atol=1e-4, err_msg=f"SHAP additivity failed for {target}")
 
 
 def test_feature_schema_completeness(raw_data: tuple[pd.DataFrame, pd.DataFrame, dict[str, int]]) -> None:

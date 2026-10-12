@@ -1,458 +1,1286 @@
 {
   "y_cad": {
+    "unit": "uncalibrated soft-voting probability share",
+    "base_value": 0.72585,
+    "additivity_property": "base_value + sum(shap_values) == model_raw_output",
     "top_10_features": [
       {
         "rank": 1,
         "feature": "Typical Chest Pain",
-        "mean_abs_shap": 0.12167
+        "mean_abs_raw_score": 0.12022,
+        "relative_contribution_pct": 31.19,
+        "stability_status": "stable model-learned association",
+        "clinical_characterization": "model-learned association, not a causal finding"
       },
       {
         "rank": 2,
-        "feature": "Atypical",
-        "mean_abs_shap": 0.04903
+        "feature": "Region RWMA",
+        "mean_abs_raw_score": 0.06735,
+        "relative_contribution_pct": 17.13,
+        "stability_status": "stable model-learned association",
+        "clinical_characterization": "model-learned association, not a causal finding"
       },
       {
         "rank": 3,
-        "feature": "Region RWMA",
-        "mean_abs_shap": 0.04303
+        "feature": "Age",
+        "mean_abs_raw_score": 0.04261,
+        "relative_contribution_pct": 9.99,
+        "stability_status": "stable model-learned association",
+        "clinical_characterization": "model-learned association, not a causal finding"
       },
       {
         "rank": 4,
-        "feature": "Age",
-        "mean_abs_shap": 0.04206
+        "feature": "TG",
+        "mean_abs_raw_score": 0.02577,
+        "relative_contribution_pct": 5.94,
+        "stability_status": "stable model-learned association",
+        "clinical_characterization": "model-learned association, not a causal finding"
       },
       {
         "rank": 5,
+        "feature": "EF-TTE",
+        "mean_abs_raw_score": 0.01982,
+        "relative_contribution_pct": 4.79,
+        "stability_status": "stable model-learned association",
+        "clinical_characterization": "model-learned association, not a causal finding"
+      },
+      {
+        "rank": 6,
         "feature": "HTN",
-        "mean_abs_shap": 0.03146
-      },
-      {
-        "rank": 6,
-        "feature": "EF-TTE",
-        "mean_abs_shap": 0.02924
+        "mean_abs_raw_score": 0.01803,
+        "relative_contribution_pct": 4.4,
+        "stability_status": "stable model-learned association",
+        "clinical_characterization": "model-learned association, not a causal finding"
       },
       {
         "rank": 7,
-        "feature": "TG",
-        "mean_abs_shap": 0.02389
+        "feature": "Tinversion",
+        "mean_abs_raw_score": 0.01538,
+        "relative_contribution_pct": 4.0,
+        "stability_status": "stable model-learned association",
+        "clinical_characterization": "model-learned association, not a causal finding"
       },
       {
         "rank": 8,
-        "feature": "FBS",
-        "mean_abs_shap": 0.02174
-      },
-      {
-        "rank": 9,
-        "feature": "Tinversion",
-        "mean_abs_shap": 0.0188
-      },
-      {
-        "rank": 10,
         "feature": "DM",
-        "mean_abs_shap": 0.01449
-      }
-    ],
-    "all_features_shap": {
-      "Typical Chest Pain": 0.12167,
-      "Atypical": 0.04903,
-      "Region RWMA": 0.04303,
-      "Age": 0.04206,
-      "HTN": 0.03146,
-      "EF-TTE": 0.02924,
-      "TG": 0.02389,
-      "FBS": 0.02174,
-      "Tinversion": 0.0188,
-      "DM": 0.01449,
-      "K": 0.01435,
-      "ESR": 0.01381,
-      "Neut": 0.01171,
-      "BP": 0.01132,
-      "BMI": 0.01129,
-      "Lymph": 0.00838,
-      "CR": 0.00805,
-      "Nonanginal": 0.00774,
-      "PR": 0.00774,
-      "Weight": 0.00655,
-      "HB": 0.00629,
-      "Na": 0.00551,
-      "PLT": 0.00517,
-      "WBC": 0.005,
-      "LDL": 0.00437,
-      "Dyspnea": 0.00429,
-      "VHD_Severe": 0.00373,
-      "Length": 0.00348,
-      "BUN": 0.00348,
-      "HDL": 0.00341,
-      "Function Class": 0.00256,
-      "Current Smoker": 0.00245,
-      "Diastolic Murmur": 0.00194,
-      "Q Wave": 0.00188,
-      "St Depression": 0.00176,
-      "Sex": 0.00148,
-      "VHD_mild": 0.00148,
-      "FH": 0.00126,
-      "DLP": 0.00118,
-      "Obesity": 0.00118,
-      "VHD_N": 0.00114,
-      "Poor R Progression": 0.00113,
-      "St Elevation": 0.00097,
-      "Lung rales": 0.00078,
-      "Systolic Murmur": 0.00075,
-      "BBB_N": 0.00056,
-      "Edema": 0.00042,
-      "CVA": 0.00034,
-      "Airway disease": 0.00027,
-      "BBB_RBBB": 0.00025,
-      "CRF": 0.00019,
-      "LVH": 0.00017,
-      "EX-Smoker": 0.00016,
-      "Thyroid Disease": 9e-05,
-      "LowTH Ang": 8e-05,
-      "CHF": 0.0,
-      "Weak Peripheral Pulse": 0.0,
-      "Exertional CP": 0.0
-    }
-  },
-  "y_lad": {
-    "top_10_features": [
-      {
-        "rank": 1,
-        "feature": "Typical Chest Pain",
-        "mean_abs_shap": 0.08949
-      },
-      {
-        "rank": 2,
-        "feature": "Region RWMA",
-        "mean_abs_shap": 0.0525
-      },
-      {
-        "rank": 3,
-        "feature": "Age",
-        "mean_abs_shap": 0.03326
-      },
-      {
-        "rank": 4,
-        "feature": "EF-TTE",
-        "mean_abs_shap": 0.03108
-      },
-      {
-        "rank": 5,
-        "feature": "Atypical",
-        "mean_abs_shap": 0.02932
-      },
-      {
-        "rank": 6,
-        "feature": "ESR",
-        "mean_abs_shap": 0.02165
-      },
-      {
-        "rank": 7,
-        "feature": "Neut",
-        "mean_abs_shap": 0.01588
-      },
-      {
-        "rank": 8,
-        "feature": "Tinversion",
-        "mean_abs_shap": 0.0157
+        "mean_abs_raw_score": 0.01455,
+        "relative_contribution_pct": 3.51,
+        "stability_status": "stable model-learned association",
+        "clinical_characterization": "model-learned association, not a causal finding"
       },
       {
         "rank": 9,
-        "feature": "Lymph",
-        "mean_abs_shap": 0.01318
-      },
-      {
-        "rank": 10,
-        "feature": "TG",
-        "mean_abs_shap": 0.01256
-      }
-    ],
-    "all_features_shap": {
-      "Typical Chest Pain": 0.08949,
-      "Region RWMA": 0.0525,
-      "Age": 0.03326,
-      "EF-TTE": 0.03108,
-      "Atypical": 0.02932,
-      "ESR": 0.02165,
-      "Neut": 0.01588,
-      "Tinversion": 0.0157,
-      "Lymph": 0.01318,
-      "TG": 0.01256,
-      "BMI": 0.01037,
-      "FBS": 0.01013,
-      "WBC": 0.00989,
-      "LDL": 0.00885,
-      "HTN": 0.00782,
-      "CR": 0.00768,
-      "PR": 0.00751,
-      "BP": 0.00701,
-      "HDL": 0.00678,
-      "Weight": 0.00658,
-      "Nonanginal": 0.00643,
-      "K": 0.006,
-      "Na": 0.006,
-      "BUN": 0.00563,
-      "PLT": 0.00551,
-      "HB": 0.00502,
-      "St Depression": 0.00498,
-      "Length": 0.00478,
-      "Dyspnea": 0.00382,
-      "Sex": 0.00378,
-      "VHD_Severe": 0.00312,
-      "DM": 0.00303,
-      "Q Wave": 0.0027,
-      "DLP": 0.00247,
-      "VHD_N": 0.00214,
-      "St Elevation": 0.00214,
-      "VHD_mild": 0.00124,
-      "Edema": 0.00118,
-      "Obesity": 0.00113,
-      "Function Class": 0.00106,
-      "EX-Smoker": 0.00098,
-      "CVA": 0.00096,
-      "Diastolic Murmur": 0.00094,
-      "FH": 0.00094,
-      "Poor R Progression": 0.00074,
-      "Systolic Murmur": 0.00071,
-      "Current Smoker": 0.00066,
-      "Lung rales": 0.00065,
-      "LVH": 0.00042,
-      "Thyroid Disease": 0.00036,
-      "BBB_N": 0.00034,
-      "Weak Peripheral Pulse": 0.00025,
-      "Airway disease": 0.00024,
-      "LowTH Ang": 0.00023,
-      "CRF": 0.00022,
-      "BBB_RBBB": 0.00021,
-      "CHF": 0.0,
-      "Exertional CP": 0.0
-    }
-  },
-  "y_lcx": {
-    "top_10_features": [
-      {
-        "rank": 1,
-        "feature": "Age",
-        "mean_abs_shap": 0.51227
-      },
-      {
-        "rank": 2,
-        "feature": "Typical Chest Pain",
-        "mean_abs_shap": 0.46311
-      },
-      {
-        "rank": 3,
-        "feature": "TG",
-        "mean_abs_shap": 0.29565
-      },
-      {
-        "rank": 4,
-        "feature": "CR",
-        "mean_abs_shap": 0.24629
-      },
-      {
-        "rank": 5,
         "feature": "FBS",
-        "mean_abs_shap": 0.21613
-      },
-      {
-        "rank": 6,
-        "feature": "PLT",
-        "mean_abs_shap": 0.21024
-      },
-      {
-        "rank": 7,
-        "feature": "Na",
-        "mean_abs_shap": 0.18557
-      },
-      {
-        "rank": 8,
-        "feature": "Length",
-        "mean_abs_shap": 0.18443
-      },
-      {
-        "rank": 9,
-        "feature": "HDL",
-        "mean_abs_shap": 0.17847
+        "mean_abs_raw_score": 0.01119,
+        "relative_contribution_pct": 2.81,
+        "stability_status": "stable model-learned association",
+        "clinical_characterization": "model-learned association, not a causal finding"
       },
       {
         "rank": 10,
         "feature": "BMI",
-        "mean_abs_shap": 0.1629
+        "mean_abs_raw_score": 0.00844,
+        "relative_contribution_pct": 1.98,
+        "stability_status": "stable model-learned association",
+        "clinical_characterization": "model-learned association, not a causal finding"
       }
     ],
     "all_features_shap": {
-      "Age": 0.51227,
-      "Typical Chest Pain": 0.46311,
-      "TG": 0.29565,
-      "CR": 0.24629,
-      "FBS": 0.21613,
-      "PLT": 0.21024,
-      "Na": 0.18557,
-      "Length": 0.18443,
-      "HDL": 0.17847,
-      "BMI": 0.1629,
-      "LDL": 0.1252,
-      "BUN": 0.11966,
-      "Weight": 0.1073,
-      "ESR": 0.0952,
-      "HB": 0.09323,
-      "Lymph": 0.09247,
-      "BP": 0.09161,
-      "K": 0.08907,
-      "Neut": 0.06407,
-      "WBC": 0.05751,
-      "VHD_mild": 0.05456,
-      "EF-TTE": 0.05217,
-      "HTN": 0.04253,
-      "DLP": 0.04211,
-      "Current Smoker": 0.03023,
-      "VHD_N": 0.00835,
-      "DM": 0.00763,
-      "Sex": 0.00626,
-      "PR": 0.00616,
-      "Region RWMA": 0.00605,
-      "EX-Smoker": 0.0,
-      "Lung rales": 0.0,
-      "Tinversion": 0.0,
-      "St Depression": 0.0,
-      "St Elevation": 0.0,
-      "Q Wave": 0.0,
-      "LowTH Ang": 0.0,
-      "Exertional CP": 0.0,
-      "Nonanginal": 0.0,
-      "Atypical": 0.0,
-      "Dyspnea": 0.0,
-      "Diastolic Murmur": 0.0,
-      "Systolic Murmur": 0.0,
-      "Weak Peripheral Pulse": 0.0,
-      "LVH": 0.0,
-      "Edema": 0.0,
-      "CHF": 0.0,
-      "Thyroid Disease": 0.0,
-      "Airway disease": 0.0,
-      "CVA": 0.0,
-      "CRF": 0.0,
-      "Function Class": 0.0,
-      "BBB_N": 0.0,
-      "BBB_RBBB": 0.0,
-      "Obesity": 0.0,
-      "VHD_Severe": 0.0,
-      "FH": 0.0,
-      "Poor R Progression": 0.0
+      "Typical Chest Pain": {
+        "mean_abs_raw_score": 0.12022,
+        "relative_contribution_pct": 31.19
+      },
+      "Region RWMA": {
+        "mean_abs_raw_score": 0.06735,
+        "relative_contribution_pct": 17.13
+      },
+      "Age": {
+        "mean_abs_raw_score": 0.04261,
+        "relative_contribution_pct": 9.99
+      },
+      "TG": {
+        "mean_abs_raw_score": 0.02577,
+        "relative_contribution_pct": 5.94
+      },
+      "EF-TTE": {
+        "mean_abs_raw_score": 0.01982,
+        "relative_contribution_pct": 4.79
+      },
+      "HTN": {
+        "mean_abs_raw_score": 0.01803,
+        "relative_contribution_pct": 4.4
+      },
+      "Tinversion": {
+        "mean_abs_raw_score": 0.01538,
+        "relative_contribution_pct": 4.0
+      },
+      "DM": {
+        "mean_abs_raw_score": 0.01455,
+        "relative_contribution_pct": 3.51
+      },
+      "FBS": {
+        "mean_abs_raw_score": 0.01119,
+        "relative_contribution_pct": 2.81
+      },
+      "BMI": {
+        "mean_abs_raw_score": 0.00844,
+        "relative_contribution_pct": 1.98
+      },
+      "Atypical": {
+        "mean_abs_raw_score": 0.00791,
+        "relative_contribution_pct": 1.9
+      },
+      "BP": {
+        "mean_abs_raw_score": 0.00738,
+        "relative_contribution_pct": 1.8
+      },
+      "Dyspnea": {
+        "mean_abs_raw_score": 0.00688,
+        "relative_contribution_pct": 1.57
+      },
+      "ESR": {
+        "mean_abs_raw_score": 0.00526,
+        "relative_contribution_pct": 1.23
+      },
+      "K": {
+        "mean_abs_raw_score": 0.00421,
+        "relative_contribution_pct": 1.13
+      },
+      "PR": {
+        "mean_abs_raw_score": 0.00406,
+        "relative_contribution_pct": 1.05
+      },
+      "Nonanginal": {
+        "mean_abs_raw_score": 0.00398,
+        "relative_contribution_pct": 0.63
+      },
+      "FH": {
+        "mean_abs_raw_score": 0.00376,
+        "relative_contribution_pct": 0.93
+      },
+      "VHD_N": {
+        "mean_abs_raw_score": 0.00325,
+        "relative_contribution_pct": 0.76
+      },
+      "Function Class": {
+        "mean_abs_raw_score": 0.00182,
+        "relative_contribution_pct": 0.51
+      },
+      "Weight": {
+        "mean_abs_raw_score": 0.00166,
+        "relative_contribution_pct": 0.31
+      },
+      "Sex": {
+        "mean_abs_raw_score": 0.00154,
+        "relative_contribution_pct": 0.44
+      },
+      "HB": {
+        "mean_abs_raw_score": 0.00137,
+        "relative_contribution_pct": 0.37
+      },
+      "CR": {
+        "mean_abs_raw_score": 0.00079,
+        "relative_contribution_pct": 0.22
+      },
+      "BBB_N": {
+        "mean_abs_raw_score": 0.00073,
+        "relative_contribution_pct": 0.17
+      },
+      "LVH": {
+        "mean_abs_raw_score": 0.00065,
+        "relative_contribution_pct": 0.17
+      },
+      "LDL": {
+        "mean_abs_raw_score": 0.00059,
+        "relative_contribution_pct": 0.14
+      },
+      "Length": {
+        "mean_abs_raw_score": 0.00052,
+        "relative_contribution_pct": 0.11
+      },
+      "WBC": {
+        "mean_abs_raw_score": 0.00046,
+        "relative_contribution_pct": 0.14
+      },
+      "St Elevation": {
+        "mean_abs_raw_score": 0.00043,
+        "relative_contribution_pct": 0.16
+      },
+      "Lung rales": {
+        "mean_abs_raw_score": 0.00043,
+        "relative_contribution_pct": 0.1
+      },
+      "Q Wave": {
+        "mean_abs_raw_score": 0.00033,
+        "relative_contribution_pct": 0.12
+      },
+      "Lymph": {
+        "mean_abs_raw_score": 0.00032,
+        "relative_contribution_pct": 0.09
+      },
+      "St Depression": {
+        "mean_abs_raw_score": 0.00029,
+        "relative_contribution_pct": 0.1
+      },
+      "PLT": {
+        "mean_abs_raw_score": 0.00026,
+        "relative_contribution_pct": 0.06
+      },
+      "Na": {
+        "mean_abs_raw_score": 0.00019,
+        "relative_contribution_pct": 0.03
+      },
+      "Current Smoker": {
+        "mean_abs_raw_score": 0.00012,
+        "relative_contribution_pct": 0.03
+      },
+      "Diastolic Murmur": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "Exertional CP": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "LowTH Ang": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "HDL": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "BUN": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "Systolic Murmur": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "CRF": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "Obesity": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "Neut": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "Weak Peripheral Pulse": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "Edema": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "DLP": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "BBB_RBBB": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "CHF": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "VHD_Severe": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "VHD_mild": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "Thyroid Disease": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "Airway disease": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "EX-Smoker": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "CVA": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "Poor R Progression": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      }
     }
   },
-  "y_rca": {
+  "y_lad": {
+    "unit": "raw probability margin of ensemble trees",
+    "base_value": 0.49746,
+    "additivity_property": "base_value + sum(shap_values) == model_raw_output",
     "top_10_features": [
       {
         "rank": 1,
         "feature": "Typical Chest Pain",
-        "mean_abs_shap": 0.03266
+        "mean_abs_raw_score": 0.08949,
+        "relative_contribution_pct": 19.0,
+        "stability_status": "stable model-learned association",
+        "clinical_characterization": "model-learned association, not a causal finding"
       },
       {
         "rank": 2,
-        "feature": "ESR",
-        "mean_abs_shap": 0.03124
+        "feature": "Region RWMA",
+        "mean_abs_raw_score": 0.0525,
+        "relative_contribution_pct": 10.78,
+        "stability_status": "stable model-learned association",
+        "clinical_characterization": "model-learned association, not a causal finding"
       },
       {
         "rank": 3,
-        "feature": "Neut",
-        "mean_abs_shap": 0.02997
+        "feature": "Age",
+        "mean_abs_raw_score": 0.03326,
+        "relative_contribution_pct": 6.91,
+        "stability_status": "stable model-learned association",
+        "clinical_characterization": "model-learned association, not a causal finding"
       },
       {
         "rank": 4,
-        "feature": "Age",
-        "mean_abs_shap": 0.02888
+        "feature": "EF-TTE",
+        "mean_abs_raw_score": 0.03108,
+        "relative_contribution_pct": 6.5,
+        "stability_status": "stable model-learned association",
+        "clinical_characterization": "model-learned association, not a causal finding"
       },
       {
         "rank": 5,
-        "feature": "Lymph",
-        "mean_abs_shap": 0.02864
+        "feature": "Atypical",
+        "mean_abs_raw_score": 0.02932,
+        "relative_contribution_pct": 6.18,
+        "stability_status": "stable model-learned association",
+        "clinical_characterization": "model-learned association, not a causal finding"
       },
       {
         "rank": 6,
-        "feature": "DM",
-        "mean_abs_shap": 0.02478
+        "feature": "ESR",
+        "mean_abs_raw_score": 0.02165,
+        "relative_contribution_pct": 4.55,
+        "stability_status": "stable model-learned association",
+        "clinical_characterization": "model-learned association, not a causal finding"
       },
       {
         "rank": 7,
-        "feature": "Atypical",
-        "mean_abs_shap": 0.02169
+        "feature": "Neut",
+        "mean_abs_raw_score": 0.01588,
+        "relative_contribution_pct": 3.34,
+        "stability_status": "potentially noisy sample-specific correlate",
+        "clinical_characterization": "model-learned association, not a causal finding"
       },
       {
         "rank": 8,
-        "feature": "FBS",
-        "mean_abs_shap": 0.01666
+        "feature": "Tinversion",
+        "mean_abs_raw_score": 0.0157,
+        "relative_contribution_pct": 3.29,
+        "stability_status": "stable model-learned association",
+        "clinical_characterization": "model-learned association, not a causal finding"
       },
       {
         "rank": 9,
-        "feature": "WBC",
-        "mean_abs_shap": 0.01351
+        "feature": "Lymph",
+        "mean_abs_raw_score": 0.01318,
+        "relative_contribution_pct": 2.75,
+        "stability_status": "potentially noisy sample-specific correlate",
+        "clinical_characterization": "model-learned association, not a causal finding"
       },
       {
         "rank": 10,
         "feature": "TG",
-        "mean_abs_shap": 0.01281
+        "mean_abs_raw_score": 0.01256,
+        "relative_contribution_pct": 2.63,
+        "stability_status": "stable model-learned association",
+        "clinical_characterization": "model-learned association, not a causal finding"
       }
     ],
     "all_features_shap": {
-      "Typical Chest Pain": 0.03266,
-      "ESR": 0.03124,
-      "Neut": 0.02997,
-      "Age": 0.02888,
-      "Lymph": 0.02864,
-      "DM": 0.02478,
-      "Atypical": 0.02169,
-      "FBS": 0.01666,
-      "WBC": 0.01351,
-      "TG": 0.01281,
-      "Na": 0.01225,
-      "Length": 0.01169,
-      "Weight": 0.0098,
-      "BMI": 0.00905,
-      "HTN": 0.00899,
-      "K": 0.00881,
-      "CR": 0.00849,
-      "HB": 0.00776,
-      "PLT": 0.00716,
-      "EF-TTE": 0.00694,
-      "Sex": 0.00677,
-      "Function Class": 0.00629,
-      "HDL": 0.00609,
-      "LDL": 0.00603,
-      "PR": 0.006,
-      "BP": 0.00559,
-      "BUN": 0.00514,
-      "Dyspnea": 0.00462,
-      "Nonanginal": 0.00401,
-      "Tinversion": 0.00289,
-      "Region RWMA": 0.00289,
-      "VHD_N": 0.00265,
-      "Poor R Progression": 0.00246,
-      "Q Wave": 0.00152,
-      "Current Smoker": 0.00143,
-      "FH": 0.00126,
-      "DLP": 0.00125,
-      "VHD_mild": 0.00117,
-      "St Depression": 0.00115,
-      "BBB_N": 0.00092,
-      "Systolic Murmur": 0.00088,
-      "BBB_RBBB": 0.00083,
-      "Diastolic Murmur": 0.00083,
-      "CVA": 0.00067,
-      "Obesity": 0.0006,
-      "St Elevation": 0.00056,
-      "VHD_Severe": 0.00049,
-      "LVH": 0.00047,
-      "Lung rales": 0.00043,
-      "Edema": 0.00031,
-      "Airway disease": 0.00027,
-      "Thyroid Disease": 0.00023,
-      "EX-Smoker": 0.00023,
-      "CRF": 0.00017,
-      "Weak Peripheral Pulse": 9e-05,
-      "CHF": 8e-05,
-      "LowTH Ang": 7e-05,
-      "Exertional CP": 0.0
+      "Typical Chest Pain": {
+        "mean_abs_raw_score": 0.08949,
+        "relative_contribution_pct": 19.0
+      },
+      "Region RWMA": {
+        "mean_abs_raw_score": 0.0525,
+        "relative_contribution_pct": 10.78
+      },
+      "Age": {
+        "mean_abs_raw_score": 0.03326,
+        "relative_contribution_pct": 6.91
+      },
+      "EF-TTE": {
+        "mean_abs_raw_score": 0.03108,
+        "relative_contribution_pct": 6.5
+      },
+      "Atypical": {
+        "mean_abs_raw_score": 0.02932,
+        "relative_contribution_pct": 6.18
+      },
+      "ESR": {
+        "mean_abs_raw_score": 0.02165,
+        "relative_contribution_pct": 4.55
+      },
+      "Neut": {
+        "mean_abs_raw_score": 0.01588,
+        "relative_contribution_pct": 3.34
+      },
+      "Tinversion": {
+        "mean_abs_raw_score": 0.0157,
+        "relative_contribution_pct": 3.29
+      },
+      "Lymph": {
+        "mean_abs_raw_score": 0.01318,
+        "relative_contribution_pct": 2.75
+      },
+      "TG": {
+        "mean_abs_raw_score": 0.01256,
+        "relative_contribution_pct": 2.63
+      },
+      "BMI": {
+        "mean_abs_raw_score": 0.01037,
+        "relative_contribution_pct": 2.17
+      },
+      "FBS": {
+        "mean_abs_raw_score": 0.01013,
+        "relative_contribution_pct": 2.1
+      },
+      "WBC": {
+        "mean_abs_raw_score": 0.00989,
+        "relative_contribution_pct": 2.03
+      },
+      "LDL": {
+        "mean_abs_raw_score": 0.00885,
+        "relative_contribution_pct": 1.87
+      },
+      "HTN": {
+        "mean_abs_raw_score": 0.00782,
+        "relative_contribution_pct": 1.63
+      },
+      "CR": {
+        "mean_abs_raw_score": 0.00768,
+        "relative_contribution_pct": 1.57
+      },
+      "PR": {
+        "mean_abs_raw_score": 0.00751,
+        "relative_contribution_pct": 1.57
+      },
+      "BP": {
+        "mean_abs_raw_score": 0.00701,
+        "relative_contribution_pct": 1.47
+      },
+      "HDL": {
+        "mean_abs_raw_score": 0.00678,
+        "relative_contribution_pct": 1.42
+      },
+      "Weight": {
+        "mean_abs_raw_score": 0.00658,
+        "relative_contribution_pct": 1.37
+      },
+      "Nonanginal": {
+        "mean_abs_raw_score": 0.00643,
+        "relative_contribution_pct": 1.34
+      },
+      "K": {
+        "mean_abs_raw_score": 0.006,
+        "relative_contribution_pct": 1.24
+      },
+      "Na": {
+        "mean_abs_raw_score": 0.006,
+        "relative_contribution_pct": 1.25
+      },
+      "BUN": {
+        "mean_abs_raw_score": 0.00563,
+        "relative_contribution_pct": 1.18
+      },
+      "PLT": {
+        "mean_abs_raw_score": 0.00551,
+        "relative_contribution_pct": 1.14
+      },
+      "HB": {
+        "mean_abs_raw_score": 0.00502,
+        "relative_contribution_pct": 1.03
+      },
+      "St Depression": {
+        "mean_abs_raw_score": 0.00498,
+        "relative_contribution_pct": 1.04
+      },
+      "Length": {
+        "mean_abs_raw_score": 0.00478,
+        "relative_contribution_pct": 1.0
+      },
+      "Dyspnea": {
+        "mean_abs_raw_score": 0.00382,
+        "relative_contribution_pct": 0.81
+      },
+      "Sex": {
+        "mean_abs_raw_score": 0.00378,
+        "relative_contribution_pct": 0.79
+      },
+      "VHD_Severe": {
+        "mean_abs_raw_score": 0.00312,
+        "relative_contribution_pct": 0.65
+      },
+      "DM": {
+        "mean_abs_raw_score": 0.00303,
+        "relative_contribution_pct": 0.64
+      },
+      "Q Wave": {
+        "mean_abs_raw_score": 0.0027,
+        "relative_contribution_pct": 0.55
+      },
+      "DLP": {
+        "mean_abs_raw_score": 0.00247,
+        "relative_contribution_pct": 0.52
+      },
+      "VHD_N": {
+        "mean_abs_raw_score": 0.00214,
+        "relative_contribution_pct": 0.45
+      },
+      "St Elevation": {
+        "mean_abs_raw_score": 0.00214,
+        "relative_contribution_pct": 0.44
+      },
+      "VHD_mild": {
+        "mean_abs_raw_score": 0.00124,
+        "relative_contribution_pct": 0.26
+      },
+      "Edema": {
+        "mean_abs_raw_score": 0.00118,
+        "relative_contribution_pct": 0.24
+      },
+      "Obesity": {
+        "mean_abs_raw_score": 0.00113,
+        "relative_contribution_pct": 0.23
+      },
+      "Function Class": {
+        "mean_abs_raw_score": 0.00106,
+        "relative_contribution_pct": 0.22
+      },
+      "EX-Smoker": {
+        "mean_abs_raw_score": 0.00098,
+        "relative_contribution_pct": 0.21
+      },
+      "CVA": {
+        "mean_abs_raw_score": 0.00096,
+        "relative_contribution_pct": 0.21
+      },
+      "Diastolic Murmur": {
+        "mean_abs_raw_score": 0.00094,
+        "relative_contribution_pct": 0.19
+      },
+      "FH": {
+        "mean_abs_raw_score": 0.00094,
+        "relative_contribution_pct": 0.2
+      },
+      "Poor R Progression": {
+        "mean_abs_raw_score": 0.00074,
+        "relative_contribution_pct": 0.16
+      },
+      "Systolic Murmur": {
+        "mean_abs_raw_score": 0.00071,
+        "relative_contribution_pct": 0.15
+      },
+      "Current Smoker": {
+        "mean_abs_raw_score": 0.00066,
+        "relative_contribution_pct": 0.14
+      },
+      "Lung rales": {
+        "mean_abs_raw_score": 0.00065,
+        "relative_contribution_pct": 0.13
+      },
+      "LVH": {
+        "mean_abs_raw_score": 0.00042,
+        "relative_contribution_pct": 0.09
+      },
+      "Thyroid Disease": {
+        "mean_abs_raw_score": 0.00036,
+        "relative_contribution_pct": 0.08
+      },
+      "BBB_N": {
+        "mean_abs_raw_score": 0.00034,
+        "relative_contribution_pct": 0.07
+      },
+      "Weak Peripheral Pulse": {
+        "mean_abs_raw_score": 0.00025,
+        "relative_contribution_pct": 0.06
+      },
+      "Airway disease": {
+        "mean_abs_raw_score": 0.00024,
+        "relative_contribution_pct": 0.05
+      },
+      "LowTH Ang": {
+        "mean_abs_raw_score": 0.00023,
+        "relative_contribution_pct": 0.05
+      },
+      "CRF": {
+        "mean_abs_raw_score": 0.00022,
+        "relative_contribution_pct": 0.05
+      },
+      "BBB_RBBB": {
+        "mean_abs_raw_score": 0.00021,
+        "relative_contribution_pct": 0.04
+      },
+      "CHF": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "Exertional CP": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      }
+    }
+  },
+  "y_lcx": {
+    "unit": "log-odds of raw LightGBM margin",
+    "base_value": -0.66059,
+    "additivity_property": "base_value + sum(shap_values) == model_raw_output",
+    "top_10_features": [
+      {
+        "rank": 1,
+        "feature": "Age",
+        "mean_abs_raw_score": 0.51227,
+        "relative_contribution_pct": 13.2,
+        "stability_status": "stable model-learned association",
+        "clinical_characterization": "model-learned association, not a causal finding"
+      },
+      {
+        "rank": 2,
+        "feature": "Typical Chest Pain",
+        "mean_abs_raw_score": 0.46311,
+        "relative_contribution_pct": 12.23,
+        "stability_status": "stable model-learned association",
+        "clinical_characterization": "model-learned association, not a causal finding"
+      },
+      {
+        "rank": 3,
+        "feature": "TG",
+        "mean_abs_raw_score": 0.29565,
+        "relative_contribution_pct": 7.51,
+        "stability_status": "stable model-learned association",
+        "clinical_characterization": "model-learned association, not a causal finding"
+      },
+      {
+        "rank": 4,
+        "feature": "CR",
+        "mean_abs_raw_score": 0.24629,
+        "relative_contribution_pct": 6.36,
+        "stability_status": "stable model-learned association",
+        "clinical_characterization": "model-learned association, not a causal finding"
+      },
+      {
+        "rank": 5,
+        "feature": "FBS",
+        "mean_abs_raw_score": 0.21613,
+        "relative_contribution_pct": 5.54,
+        "stability_status": "stable model-learned association",
+        "clinical_characterization": "model-learned association, not a causal finding"
+      },
+      {
+        "rank": 6,
+        "feature": "PLT",
+        "mean_abs_raw_score": 0.21024,
+        "relative_contribution_pct": 5.48,
+        "stability_status": "potentially noisy sample-specific correlate",
+        "clinical_characterization": "model-learned association, not a causal finding"
+      },
+      {
+        "rank": 7,
+        "feature": "Na",
+        "mean_abs_raw_score": 0.18557,
+        "relative_contribution_pct": 4.89,
+        "stability_status": "potentially noisy sample-specific correlate",
+        "clinical_characterization": "model-learned association, not a causal finding"
+      },
+      {
+        "rank": 8,
+        "feature": "Length",
+        "mean_abs_raw_score": 0.18443,
+        "relative_contribution_pct": 4.85,
+        "stability_status": "potentially noisy sample-specific correlate",
+        "clinical_characterization": "model-learned association, not a causal finding"
+      },
+      {
+        "rank": 9,
+        "feature": "HDL",
+        "mean_abs_raw_score": 0.17847,
+        "relative_contribution_pct": 4.63,
+        "stability_status": "stable model-learned association",
+        "clinical_characterization": "model-learned association, not a causal finding"
+      },
+      {
+        "rank": 10,
+        "feature": "BMI",
+        "mean_abs_raw_score": 0.1629,
+        "relative_contribution_pct": 4.16,
+        "stability_status": "stable model-learned association",
+        "clinical_characterization": "model-learned association, not a causal finding"
+      }
+    ],
+    "all_features_shap": {
+      "Age": {
+        "mean_abs_raw_score": 0.51227,
+        "relative_contribution_pct": 13.2
+      },
+      "Typical Chest Pain": {
+        "mean_abs_raw_score": 0.46311,
+        "relative_contribution_pct": 12.23
+      },
+      "TG": {
+        "mean_abs_raw_score": 0.29565,
+        "relative_contribution_pct": 7.51
+      },
+      "CR": {
+        "mean_abs_raw_score": 0.24629,
+        "relative_contribution_pct": 6.36
+      },
+      "FBS": {
+        "mean_abs_raw_score": 0.21613,
+        "relative_contribution_pct": 5.54
+      },
+      "PLT": {
+        "mean_abs_raw_score": 0.21024,
+        "relative_contribution_pct": 5.48
+      },
+      "Na": {
+        "mean_abs_raw_score": 0.18557,
+        "relative_contribution_pct": 4.89
+      },
+      "Length": {
+        "mean_abs_raw_score": 0.18443,
+        "relative_contribution_pct": 4.85
+      },
+      "HDL": {
+        "mean_abs_raw_score": 0.17847,
+        "relative_contribution_pct": 4.63
+      },
+      "BMI": {
+        "mean_abs_raw_score": 0.1629,
+        "relative_contribution_pct": 4.16
+      },
+      "LDL": {
+        "mean_abs_raw_score": 0.1252,
+        "relative_contribution_pct": 3.34
+      },
+      "BUN": {
+        "mean_abs_raw_score": 0.11966,
+        "relative_contribution_pct": 3.12
+      },
+      "Weight": {
+        "mean_abs_raw_score": 0.1073,
+        "relative_contribution_pct": 2.74
+      },
+      "ESR": {
+        "mean_abs_raw_score": 0.0952,
+        "relative_contribution_pct": 2.49
+      },
+      "HB": {
+        "mean_abs_raw_score": 0.09323,
+        "relative_contribution_pct": 2.43
+      },
+      "Lymph": {
+        "mean_abs_raw_score": 0.09247,
+        "relative_contribution_pct": 2.4
+      },
+      "BP": {
+        "mean_abs_raw_score": 0.09161,
+        "relative_contribution_pct": 2.37
+      },
+      "K": {
+        "mean_abs_raw_score": 0.08907,
+        "relative_contribution_pct": 2.35
+      },
+      "Neut": {
+        "mean_abs_raw_score": 0.06407,
+        "relative_contribution_pct": 1.69
+      },
+      "WBC": {
+        "mean_abs_raw_score": 0.05751,
+        "relative_contribution_pct": 1.51
+      },
+      "VHD_mild": {
+        "mean_abs_raw_score": 0.05456,
+        "relative_contribution_pct": 1.46
+      },
+      "EF-TTE": {
+        "mean_abs_raw_score": 0.05217,
+        "relative_contribution_pct": 1.36
+      },
+      "HTN": {
+        "mean_abs_raw_score": 0.04253,
+        "relative_contribution_pct": 1.1
+      },
+      "DLP": {
+        "mean_abs_raw_score": 0.04211,
+        "relative_contribution_pct": 1.11
+      },
+      "Current Smoker": {
+        "mean_abs_raw_score": 0.03023,
+        "relative_contribution_pct": 0.79
+      },
+      "VHD_N": {
+        "mean_abs_raw_score": 0.00835,
+        "relative_contribution_pct": 0.21
+      },
+      "DM": {
+        "mean_abs_raw_score": 0.00763,
+        "relative_contribution_pct": 0.2
+      },
+      "Sex": {
+        "mean_abs_raw_score": 0.00626,
+        "relative_contribution_pct": 0.17
+      },
+      "PR": {
+        "mean_abs_raw_score": 0.00616,
+        "relative_contribution_pct": 0.16
+      },
+      "Region RWMA": {
+        "mean_abs_raw_score": 0.00605,
+        "relative_contribution_pct": 0.16
+      },
+      "EX-Smoker": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "Lung rales": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "Tinversion": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "St Depression": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "St Elevation": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "Q Wave": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "LowTH Ang": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "Exertional CP": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "Nonanginal": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "Atypical": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "Dyspnea": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "Diastolic Murmur": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "Systolic Murmur": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "Weak Peripheral Pulse": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "LVH": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "Edema": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "CHF": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "Thyroid Disease": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "Airway disease": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "CVA": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "CRF": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "Function Class": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "BBB_N": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "BBB_RBBB": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "Obesity": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "VHD_Severe": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "FH": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "Poor R Progression": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      }
+    }
+  },
+  "y_rca": {
+    "unit": "log-odds of raw LightGBM margin",
+    "base_value": -0.56531,
+    "additivity_property": "base_value + sum(shap_values) == model_raw_output",
+    "top_10_features": [
+      {
+        "rank": 1,
+        "feature": "Typical Chest Pain",
+        "mean_abs_raw_score": 0.30677,
+        "relative_contribution_pct": 22.14,
+        "stability_status": "stable model-learned association",
+        "clinical_characterization": "model-learned association, not a causal finding"
+      },
+      {
+        "rank": 2,
+        "feature": "DM",
+        "mean_abs_raw_score": 0.23661,
+        "relative_contribution_pct": 16.46,
+        "stability_status": "stable model-learned association",
+        "clinical_characterization": "model-learned association, not a causal finding"
+      },
+      {
+        "rank": 3,
+        "feature": "Age",
+        "mean_abs_raw_score": 0.18247,
+        "relative_contribution_pct": 12.78,
+        "stability_status": "stable model-learned association",
+        "clinical_characterization": "model-learned association, not a causal finding"
+      },
+      {
+        "rank": 4,
+        "feature": "ESR",
+        "mean_abs_raw_score": 0.14507,
+        "relative_contribution_pct": 10.34,
+        "stability_status": "stable model-learned association",
+        "clinical_characterization": "model-learned association, not a causal finding"
+      },
+      {
+        "rank": 5,
+        "feature": "Neut",
+        "mean_abs_raw_score": 0.13928,
+        "relative_contribution_pct": 9.52,
+        "stability_status": "potentially noisy sample-specific correlate",
+        "clinical_characterization": "model-learned association, not a causal finding"
+      },
+      {
+        "rank": 6,
+        "feature": "Lymph",
+        "mean_abs_raw_score": 0.11218,
+        "relative_contribution_pct": 8.03,
+        "stability_status": "potentially noisy sample-specific correlate",
+        "clinical_characterization": "model-learned association, not a causal finding"
+      },
+      {
+        "rank": 7,
+        "feature": "TG",
+        "mean_abs_raw_score": 0.06881,
+        "relative_contribution_pct": 4.93,
+        "stability_status": "stable model-learned association",
+        "clinical_characterization": "model-learned association, not a causal finding"
+      },
+      {
+        "rank": 8,
+        "feature": "WBC",
+        "mean_abs_raw_score": 0.06647,
+        "relative_contribution_pct": 4.89,
+        "stability_status": "potentially noisy sample-specific correlate",
+        "clinical_characterization": "model-learned association, not a causal finding"
+      },
+      {
+        "rank": 9,
+        "feature": "Length",
+        "mean_abs_raw_score": 0.05421,
+        "relative_contribution_pct": 3.95,
+        "stability_status": "stable model-learned association",
+        "clinical_characterization": "model-learned association, not a causal finding"
+      },
+      {
+        "rank": 10,
+        "feature": "Sex",
+        "mean_abs_raw_score": 0.05177,
+        "relative_contribution_pct": 3.74,
+        "stability_status": "stable model-learned association",
+        "clinical_characterization": "model-learned association, not a causal finding"
+      }
+    ],
+    "all_features_shap": {
+      "Typical Chest Pain": {
+        "mean_abs_raw_score": 0.30677,
+        "relative_contribution_pct": 22.14
+      },
+      "DM": {
+        "mean_abs_raw_score": 0.23661,
+        "relative_contribution_pct": 16.46
+      },
+      "Age": {
+        "mean_abs_raw_score": 0.18247,
+        "relative_contribution_pct": 12.78
+      },
+      "ESR": {
+        "mean_abs_raw_score": 0.14507,
+        "relative_contribution_pct": 10.34
+      },
+      "Neut": {
+        "mean_abs_raw_score": 0.13928,
+        "relative_contribution_pct": 9.52
+      },
+      "Lymph": {
+        "mean_abs_raw_score": 0.11218,
+        "relative_contribution_pct": 8.03
+      },
+      "TG": {
+        "mean_abs_raw_score": 0.06881,
+        "relative_contribution_pct": 4.93
+      },
+      "WBC": {
+        "mean_abs_raw_score": 0.06647,
+        "relative_contribution_pct": 4.89
+      },
+      "Length": {
+        "mean_abs_raw_score": 0.05421,
+        "relative_contribution_pct": 3.95
+      },
+      "Sex": {
+        "mean_abs_raw_score": 0.05177,
+        "relative_contribution_pct": 3.74
+      },
+      "PR": {
+        "mean_abs_raw_score": 0.01845,
+        "relative_contribution_pct": 1.36
+      },
+      "HB": {
+        "mean_abs_raw_score": 0.01147,
+        "relative_contribution_pct": 0.8
+      },
+      "PLT": {
+        "mean_abs_raw_score": 0.00854,
+        "relative_contribution_pct": 0.58
+      },
+      "Weight": {
+        "mean_abs_raw_score": 0.00647,
+        "relative_contribution_pct": 0.47
+      },
+      "Dyspnea": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "St Elevation": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "Function Class": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "EF-TTE": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "Exertional CP": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "LowTH Ang": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "Q Wave": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "Na": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "K": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "BUN": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "Atypical": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "HDL": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "LDL": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "St Depression": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "CR": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "FBS": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "BP": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "BMI": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "Tinversion": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "Region RWMA": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "BBB_N": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "BBB_RBBB": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "CVA": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "Diastolic Murmur": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "Systolic Murmur": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "Lung rales": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "Weak Peripheral Pulse": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "Edema": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "DLP": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "CHF": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "Thyroid Disease": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "Airway disease": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "CRF": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "VHD_N": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "Obesity": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "FH": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "EX-Smoker": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "Current Smoker": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "HTN": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "Nonanginal": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "LVH": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "VHD_mild": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "VHD_Severe": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      },
+      "Poor R Progression": {
+        "mean_abs_raw_score": 0.0,
+        "relative_contribution_pct": 0.0
+      }
     }
   }
 }

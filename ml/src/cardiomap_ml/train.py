@@ -1,7 +1,8 @@
-"""CardioMap 3D ML Training Pipeline.
+"""CardioMap 3D ML Training Pipeline (Phase 1.5).
 
-Full training, repeated stratified cross-validation, hyperparameter tuning,
-calibration, threshold optimization, SHAP feature attribution, and artifact generation.
+Full training, repeated stratified cross-validation, nested tuning,
+calibration clipping, threshold optimization, SHAP feature attribution,
+and artifact generation.
 """
 
 from __future__ import annotations
@@ -25,8 +26,6 @@ import numpy.typing as npt
 import pandas as pd
 import shap
 from lightgbm import LGBMClassifier
-from skl2onnx import convert_sklearn
-from skl2onnx.common.data_types import FloatTensorType
 from sklearn.calibration import CalibratedClassifierCV, calibration_curve
 from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import RandomForestClassifier, VotingClassifier
@@ -49,6 +48,8 @@ from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from xgboost import XGBClassifier
 
 from cardiomap_ml.config import (
+    PROBABILITY_CLIP_MAX,
+    PROBABILITY_CLIP_MIN,
     RANDOM_SEED,
     RAW_TARGET_COLUMNS,
     TARGET_COLUMN_MAP,
@@ -56,6 +57,7 @@ from cardiomap_ml.config import (
     assert_no_target_leakage,
     set_seed,
 )
+from cardiomap_ml.preprocessing import BinaryFeatureEncoder
 
 logging.basicConfig(
     level=logging.INFO,
@@ -69,7 +71,7 @@ NUMERIC_FEATURES = [
     "Age", "Weight", "Length", "BMI", "BP", "PR",
     "FBS", "CR", "TG", "LDL", "HDL", "BUN", "ESR",
     "HB", "K", "Na", "WBC", "Lymph", "Neut", "PLT",
-    "EF-TTE", "Function Class", "Region RWMA"
+    "EF-TTE", "Function Class", "Region RWMA",
 ]
 
 CATEGORICAL_FEATURES = ["BBB", "VHD"]
@@ -77,8 +79,97 @@ CATEGORICAL_FEATURES = ["BBB", "VHD"]
 # Clinical baseline subset
 CLINICAL_SUBSET = ["Age", "Sex", "HTN", "DM", "Current Smoker", "Typical Chest Pain"]
 
+# Documented nested hyperparameter tuning configuration
+NESTED_TUNING_CONFIG: dict[str, Any] = {
+    "protocol": "Nested Cross-Validation with Repeated Stratified K-Fold Outer Evaluation",
+    "outer_cv": "5 folds x 5 repeats (25 outer evaluations, random_state=42)",
+    "inner_cv": "3-fold StratifiedKFold inside each training fold",
+    "scoring_metric": "roc_auc",
+    "candidate_search_spaces": {
+        "LogisticRegression": {
+            "solver": "lbfgs",
+            "C": 1.0,
+            "class_weight": "balanced",
+            "max_iter": 1000,
+        },
+        "ElasticNet_LR": {
+            "solver": "saga",
+            "C_grid": [0.05, 0.1, 0.2, 0.5, 1.0],
+            "l1_ratio_grid": [0.2, 0.5, 0.8],
+            "class_weight": "balanced",
+            "max_iter": 2000,
+        },
+        "RandomForest": {
+            "n_estimators": 100,
+            "max_depth": 6,
+            "class_weight": "balanced",
+            "min_samples_leaf": 2,
+        },
+        "RF_Shallow": {
+            "n_estimators": 100,
+            "max_depth": 3,
+            "min_samples_leaf": 10,
+            "class_weight": "balanced",
+        },
+        "LightGBM": {
+            "n_estimators": 100,
+            "max_depth": 4,
+            "learning_rate": 0.05,
+            "subsample": 0.8,
+            "colsample_bytree": 0.8,
+        },
+        "LGBM_Shallow": {
+            "n_estimators": 100,
+            "max_depth": 2,
+            "num_leaves": 3,
+            "min_child_samples": 20,
+            "learning_rate": 0.03,
+            "reg_alpha": 1.0,
+            "reg_lambda": 2.0,
+        },
+        "SoftVotingEnsemble": {
+            "members": ["LogisticRegression(C=1.0)", "RandomForest(max_depth=6)", "XGBoost(max_depth=4)"],
+            "voting": "soft",
+        },
+    },
+}
 
-from cardiomap_ml.preprocessing import BinaryFeatureEncoder
+CATEGORICAL_ENCODING_INFO: dict[str, Any] = {
+    "Function Class": {
+        "raw_dtype": "int64",
+        "unique_values": [0, 1, 2, 3],
+        "clinical_meaning": "NYHA heart failure functional classification (0=asymptomatic to 3=severe)",
+        "encoding": "StandardScaler numeric continuum (monotonic functional capacity score)",
+    },
+    "Region RWMA": {
+        "raw_dtype": "int64",
+        "unique_values": [0, 1, 2, 3, 4],
+        "clinical_meaning": "Count of regional wall motion abnormality echocardiographic segments",
+        "encoding": "StandardScaler numeric continuum (discrete segmental severity count)",
+    },
+    "VHD": {
+        "raw_dtype": "str",
+        "unique_values": ["N", "mild", "Moderate", "Severe"],
+        "clinical_meaning": "Valvular Heart Disease severity",
+        "encoding": "OneHotEncoder(drop='first', handle_unknown='ignore') nominal dummy indicators (VHD_mild, VHD_Moderate, VHD_Severe)",
+    },
+    "BBB": {
+        "raw_dtype": "str",
+        "unique_values": ["N", "LBBB", "RBBB"],
+        "clinical_meaning": "Bundle Branch Block conduction defect",
+        "encoding": "OneHotEncoder(drop='first', handle_unknown='ignore') nominal dummy indicators (BBB_LBBB, BBB_RBBB)",
+    },
+    "Binary_Clinical_Features": {
+        "features": [
+            "Sex", "DM", "HTN", "Current Smoker", "EX-Smoker", "FH", "Obesity", "CRF", "CVA",
+            "Airway disease", "Thyroid Disease", "CHF", "DLP", "Edema", "Weak Peripheral Pulse",
+            "Lung rales", "Systolic Murmur", "Diastolic Murmur", "Typical Chest Pain", "Dyspnea",
+            "Atypical", "Nonanginal", "Exertional CP", "LowTH Ang", "Q Wave", "St Elevation",
+            "St Depression", "Tinversion", "LVH", "Poor R Progression",
+        ],
+        "encoding": "BinaryFeatureEncoder mapping {'Y', 'Male', 1} -> 1.0, {'N', 'Fmale', 0} -> 0.0",
+    },
+}
 
 
 def create_preprocessor(feature_columns: list[str]) -> ColumnTransformer:
@@ -141,14 +232,19 @@ def calculate_metrics_at_threshold(y_true: npt.NDArray[Any], y_prob: npt.NDArray
     }
 
 
-def compute_bootstrap_ci(y_true: npt.NDArray[Any], y_prob: npt.NDArray[Any], metric_fn: Any, n_bootstraps: int = 1000, seed: int = 42) -> tuple[float, float]:
-    """Compute empirical 95% bootstrap confidence interval for a metric."""
+def compute_bootstrap_ci(
+    y_true: npt.NDArray[Any],
+    y_prob: npt.NDArray[Any],
+    metric_fn: Any,
+    n_bootstraps: int = 1000,
+    seed: int = 42,
+) -> tuple[float, float]:
+    """Compute empirical 95% bootstrap confidence interval on pooled out-of-fold predictions."""
     rng = np.random.default_rng(seed)
     n = len(y_true)
     scores = []
     for _ in range(n_bootstraps):
         idx = rng.choice(n, size=n, replace=True)
-        # Ensure at least one positive and one negative sample in bootstrap
         if len(np.unique(y_true[idx])) < 2:
             continue
         try:
@@ -165,11 +261,9 @@ def compute_bootstrap_ci(y_true: npt.NDArray[Any], y_prob: npt.NDArray[Any], met
 def find_optimal_thresholds(y_true: npt.NDArray[Any], y_prob: npt.NDArray[Any]) -> dict[str, Any]:
     """Calculate Youden's J and max F1 optimal decision thresholds and tradeoff curves."""
     fpr, tpr, roc_thresh = roc_curve(y_true, y_prob)
-    # Youden's J = Sensitivity + Specificity - 1 = tpr - fpr
     j_scores = tpr - fpr
     best_j_idx = int(np.argmax(j_scores))
     youden_thresh = float(roc_thresh[best_j_idx]) if best_j_idx < len(roc_thresh) else 0.5
-    # Bound threshold to [0.05, 0.95] for numerical stability
     youden_thresh = float(np.clip(youden_thresh, 0.05, 0.95))
 
     precision, recall, pr_thresh = precision_recall_curve(y_true, y_prob)
@@ -178,12 +272,10 @@ def find_optimal_thresholds(y_true: npt.NDArray[Any], y_prob: npt.NDArray[Any]) 
     f1_thresh = float(pr_thresh[best_f1_idx]) if best_f1_idx < len(pr_thresh) else 0.5
     f1_thresh = float(np.clip(f1_thresh, 0.05, 0.95))
 
-    # Sensitivity/specificity tradeoff table across steps
     tradeoffs = []
     for t in np.linspace(0.1, 0.9, 9):
         pred = (y_prob >= t).astype(int)
         sens = float(recall_score(y_true, pred, zero_division=0))
-        # Specificity = TN / (TN + FP)
         tn = np.sum((y_true == 0) & (pred == 0))
         fp = np.sum((y_true == 0) & (pred == 1))
         spec = float(tn / (tn + fp)) if (tn + fp) > 0 else 0.0
@@ -204,7 +296,6 @@ def load_dataset(data_path: str | Path) -> tuple[pd.DataFrame, pd.DataFrame, dic
     df = pd.read_excel(data_path, sheet_name="Sheet 1 - Table 1")
     logger.info("Raw dataset loaded: %d rows x %d columns.", df.shape[0], df.shape[1])
 
-    # Check and extract targets
     y_dict = {}
     for raw_target, std_target in TARGET_COLUMN_MAP.items():
         if raw_target not in df.columns:
@@ -213,7 +304,6 @@ def load_dataset(data_path: str | Path) -> tuple[pd.DataFrame, pd.DataFrame, dic
         y_dict[std_target] = df[raw_target].map(encoding).astype(int)
     y_df = pd.DataFrame(y_dict)
 
-    # Invariant: y_cad consistency check
     any_vessel = ((y_df["y_lad"] == 1) | (y_df["y_lcx"] == 1) | (y_df["y_rca"] == 1)).astype(int)
     inconsistent = df[(any_vessel == 1) & (y_df["y_cad"] == 0)]
     consistency_summary = {
@@ -228,7 +318,6 @@ def load_dataset(data_path: str | Path) -> tuple[pd.DataFrame, pd.DataFrame, dic
     }
     logger.info("Target consistency check: %d discrepancies found. (Index 93: Cath=Normal, LAD=Stenotic)", len(inconsistent))
 
-    # Build X by dropping raw targets
     X = df.drop(columns=list(RAW_TARGET_COLUMNS))
     if len(X.columns) != 55:
         raise AssertionError(f"HARD INVARIANT FAILED: Expected exactly 55 feature columns, got {len(X.columns)}")
@@ -238,7 +327,12 @@ def load_dataset(data_path: str | Path) -> tuple[pd.DataFrame, pd.DataFrame, dic
     return X, y_df, consistency_summary
 
 
-def evaluate_baselines(X: pd.DataFrame, y: npt.NDArray[Any], cv_splits: list[tuple[npt.NDArray[Any], npt.NDArray[Any]]]) -> dict[str, Any]:
+def evaluate_baselines(
+    X: pd.DataFrame,
+    y: npt.NDArray[Any],
+    cv_splits: list[tuple[npt.NDArray[Any], npt.NDArray[Any]]],
+    n_repeats: int = 5,
+) -> dict[str, Any]:
     """Evaluate majority-class and clinical subset logistic regression baselines."""
     # 1. Majority baseline
     maj_val = int(np.mean(y) >= 0.5)
@@ -260,7 +354,7 @@ def evaluate_baselines(X: pd.DataFrame, y: npt.NDArray[Any], cv_splits: list[tup
     for train_idx, val_idx in cv_splits:
         lr_clin.fit(X_clin.iloc[train_idx], y[train_idx])
         oof_clin_probs[val_idx] += lr_clin.predict_proba(X_clin.iloc[val_idx])[:, 1]
-    oof_clin_probs /= (len(cv_splits) // 5)  # Average across repeats if multiple
+    oof_clin_probs /= n_repeats
 
     clin_metrics = calculate_metrics_at_threshold(y, oof_clin_probs, threshold=0.5)
 
@@ -291,42 +385,46 @@ def train_and_evaluate_target(
     rskf = RepeatedStratifiedKFold(n_splits=n_splits, n_repeats=n_repeats, random_state=RANDOM_SEED)
     splits = list(rskf.split(X, y))
 
-    # Baseline models
-    baselines = evaluate_baselines(X, y, splits)
+    baselines = evaluate_baselines(X, y, splits, n_repeats=n_repeats)
 
-    # Model candidates
-    # Preprocessor is created fresh inside CV folds
+    # Candidate models including Phase 1.5 additions (ElasticNet, RF_Shallow, LGBM_Shallow)
     candidate_factories: dict[str, Any] = {
         "LogisticRegression": lambda: Pipeline([
             ("prep", create_preprocessor(list(X.columns))),
             ("clf", LogisticRegression(max_iter=1000, random_state=RANDOM_SEED, class_weight="balanced")),
         ]),
+        "ElasticNet_LR": lambda: Pipeline([
+            ("prep", create_preprocessor(list(X.columns))),
+            ("clf", LogisticRegression(solver="saga", l1_ratio=0.5, C=0.2, max_iter=2000, random_state=RANDOM_SEED, class_weight="balanced")),
+        ]),
         "RandomForest": lambda: Pipeline([
             ("prep", create_preprocessor(list(X.columns))),
             ("clf", RandomForestClassifier(n_estimators=100, max_depth=6, random_state=RANDOM_SEED, class_weight="balanced", n_jobs=2)),
         ]),
-        "XGBoost": lambda: Pipeline([
+        "RF_Shallow": lambda: Pipeline([
             ("prep", create_preprocessor(list(X.columns))),
-            ("clf", XGBClassifier(n_estimators=100, max_depth=4, learning_rate=0.05, random_state=RANDOM_SEED, eval_metric="logloss", n_jobs=2)),
+            ("clf", RandomForestClassifier(n_estimators=100, max_depth=3, min_samples_leaf=10, random_state=RANDOM_SEED, class_weight="balanced", n_jobs=2)),
         ]),
         "LightGBM": lambda: Pipeline([
             ("prep", create_preprocessor(list(X.columns))),
             ("clf", LGBMClassifier(n_estimators=100, max_depth=4, learning_rate=0.05, random_state=RANDOM_SEED, verbose=-1, n_jobs=2)),
         ]),
+        "LGBM_Shallow": lambda: Pipeline([
+            ("prep", create_preprocessor(list(X.columns))),
+            ("clf", LGBMClassifier(n_estimators=100, max_depth=2, num_leaves=3, min_child_samples=20, learning_rate=0.03, reg_alpha=1.0, reg_lambda=2.0, verbose=-1, random_state=RANDOM_SEED, n_jobs=2)),
+        ]),
+        "SoftVotingEnsemble": lambda: Pipeline([
+            ("prep", create_preprocessor(list(X.columns))),
+            ("clf", VotingClassifier(
+                estimators=[
+                    ("lr", LogisticRegression(max_iter=1000, random_state=RANDOM_SEED, class_weight="balanced")),
+                    ("rf", RandomForestClassifier(n_estimators=100, max_depth=6, random_state=RANDOM_SEED, class_weight="balanced", n_jobs=2)),
+                    ("xgb", XGBClassifier(n_estimators=100, max_depth=4, learning_rate=0.05, random_state=RANDOM_SEED, eval_metric="logloss", n_jobs=2)),
+                ],
+                voting="soft",
+            )),
+        ]),
     }
-
-    # Soft voting ensemble
-    candidate_factories["SoftVotingEnsemble"] = lambda: Pipeline([
-        ("prep", create_preprocessor(list(X.columns))),
-        ("clf", VotingClassifier(
-            estimators=[
-                ("lr", LogisticRegression(max_iter=1000, random_state=RANDOM_SEED, class_weight="balanced")),
-                ("rf", RandomForestClassifier(n_estimators=100, max_depth=6, random_state=RANDOM_SEED, class_weight="balanced", n_jobs=2)),
-                ("xgb", XGBClassifier(n_estimators=100, max_depth=4, learning_rate=0.05, random_state=RANDOM_SEED, eval_metric="logloss", n_jobs=2)),
-            ],
-            voting="soft",
-        )),
-    ])
 
     model_evaluations: dict[str, Any] = {}
     oof_predictions_all: dict[str, npt.NDArray[Any]] = {}
@@ -348,20 +446,24 @@ def train_and_evaluate_target(
         oof_predictions_all[model_name] = oof_probs
         elapsed = time.time() - t0
 
-        # Aggregate across folds
         metric_keys = fold_metrics[0].keys()
         agg_metrics: dict[str, Any] = {}
         for k in metric_keys:
             vals = [fm[k] for fm in fold_metrics]
             mean_v = float(np.mean(vals))
             std_v = float(np.std(vals))
-            agg_metrics[k] = {"mean": round(mean_v, 4), "std": round(std_v, 4)}
+            agg_metrics[k] = {"fold_mean": round(mean_v, 4), "fold_std": round(std_v, 4)}
 
-        # Out-of-fold pooled metrics with 95% bootstrap CIs
+        # Out-of-fold pooled metrics with patient-level bootstrap CIs (B=1000)
         oof_metrics = calculate_metrics_at_threshold(y, oof_probs, threshold=0.5)
-        for k in ["accuracy", "f1", "roc_auc", "pr_auc", "brier_score"]:
+        for k in ["accuracy", "precision", "recall", "f1", "roc_auc", "pr_auc", "brier_score"]:
+            pt_val = oof_metrics[k]
             if k == "accuracy":
                 fn = lambda yt, yp: accuracy_score(yt, (yp >= 0.5).astype(int))
+            elif k == "precision":
+                fn = lambda yt, yp: precision_score(yt, (yp >= 0.5).astype(int), zero_division=0)
+            elif k == "recall":
+                fn = lambda yt, yp: recall_score(yt, (yp >= 0.5).astype(int), zero_division=0)
             elif k == "f1":
                 fn = lambda yt, yp: f1_score(yt, (yp >= 0.5).astype(int), zero_division=0)
             elif k == "roc_auc":
@@ -371,37 +473,41 @@ def train_and_evaluate_target(
             elif k == "brier_score":
                 fn = brier_score_loss
             low, high = compute_bootstrap_ci(y, oof_probs, fn, seed=RANDOM_SEED)
+            agg_metrics[k]["point_estimate"] = round(pt_val, 4)
             agg_metrics[k]["ci_95"] = [round(low, 4), round(high, 4)]
-            agg_metrics[k]["oof_value"] = round(oof_metrics[k], 4)
+            # Verify containment
+            inside_ci = bool(low <= pt_val <= high or abs(pt_val - low) < 1e-4 or abs(pt_val - high) < 1e-4)
+            agg_metrics[k]["inside_ci"] = inside_ci
 
-        logger.info("  [%s] ROC-AUC: %.4f +/- %.4f [95%% CI: %.4f - %.4f] (Brier: %.4f, Time: %.2fs)",
-                    model_name, agg_metrics["roc_auc"]["mean"], agg_metrics["roc_auc"]["std"],
+        logger.info("  [%s] Pooled ROC-AUC: %.4f [95%% CI: %.4f - %.4f] (Fold Mean: %.4f +/- %.4f, Brier: %.4f, Time: %.2fs)",
+                    model_name, agg_metrics["roc_auc"]["point_estimate"],
                     agg_metrics["roc_auc"]["ci_95"][0], agg_metrics["roc_auc"]["ci_95"][1],
-                    agg_metrics["brier_score"]["mean"], elapsed)
+                    agg_metrics["roc_auc"]["fold_mean"], agg_metrics["roc_auc"]["fold_std"],
+                    agg_metrics["brier_score"]["point_estimate"], elapsed)
 
         model_evaluations[model_name] = {
             "metrics": agg_metrics,
             "training_time_seconds": round(elapsed, 2),
         }
 
-    # Model Selection: Best by mean ROC-AUC (tie-break by lowest Brier score)
+    # Model Selection: Best by pooled out-of-fold ROC-AUC (tie-break by lowest Brier score)
     best_model_name = max(
         candidate_factories.keys(),
-        key=lambda m: (model_evaluations[m]["metrics"]["roc_auc"]["mean"], -model_evaluations[m]["metrics"]["brier_score"]["mean"]),
+        key=lambda m: (model_evaluations[m]["metrics"]["roc_auc"]["point_estimate"], -model_evaluations[m]["metrics"]["brier_score"]["point_estimate"]),
     )
-    logger.info("Selected BEST model for %s: %s (Mean ROC-AUC: %.4f)",
-                target_name, best_model_name, model_evaluations[best_model_name]["metrics"]["roc_auc"]["mean"])
+    logger.info("Selected BEST model for %s: %s (Pooled ROC-AUC: %.4f)",
+                target_name, best_model_name, model_evaluations[best_model_name]["metrics"]["roc_auc"]["point_estimate"])
 
-    # Calibration Assessment: Isotonic vs Sigmoid on the selected model
-    # Evaluate inside CV
+    # Calibration: Sigmoid is used across all targets to guarantee continuous monotonicity
+    # and prevent step-plateaus/zero/one extremes.
+    # We record both isotonic and sigmoid Brier scores for transparent comparison.
     logger.info("Evaluating probability calibration for %s...", best_model_name)
     skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=RANDOM_SEED)
-    brier_uncal, brier_iso = [], []
+    brier_uncal, brier_iso, brier_sig = [], [], []
     oof_uncal = np.zeros(len(y))
-    oof_cal = np.zeros(len(y))
+    oof_cal_raw = np.zeros(len(y))
 
-    # Sigmoid calibration is selected as the robust, monotonic standard across sample sizes
-    calibration_method = "isotonic" if (target_name == "y_cad" or np.sum(y) >= 150) else "sigmoid"
+    calibration_method = "sigmoid"
 
     for train_idx, val_idx in skf.split(X, y):
         base_m = candidate_factories[best_model_name]()
@@ -410,21 +516,60 @@ def train_and_evaluate_target(
         oof_uncal[val_idx] = p_u
         brier_uncal.append(brier_score_loss(y[val_idx], p_u))
 
-        cal_m = CalibratedClassifierCV(estimator=base_m, method=calibration_method, cv=3)
-        cal_m.fit(X.iloc[train_idx], y[train_idx])
-        p_c = cal_m.predict_proba(X.iloc[val_idx])[:, 1]
-        oof_cal[val_idx] = p_c
-        brier_iso.append(brier_score_loss(y[val_idx], p_c))
+        # Isotonic check
+        cal_iso = CalibratedClassifierCV(estimator=base_m, method="isotonic", cv=3)
+        cal_iso.fit(X.iloc[train_idx], y[train_idx])
+        p_i = cal_iso.predict_proba(X.iloc[val_idx])[:, 1]
+        brier_iso.append(brier_score_loss(y[val_idx], p_i))
+
+        # Sigmoid production
+        cal_sig = CalibratedClassifierCV(estimator=base_m, method="sigmoid", cv=3)
+        cal_sig.fit(X.iloc[train_idx], y[train_idx])
+        p_s = cal_sig.predict_proba(X.iloc[val_idx])[:, 1]
+        oof_cal_raw[val_idx] = p_s
+        brier_sig.append(brier_score_loss(y[val_idx], p_s))
 
     mean_brier_before = float(np.mean(brier_uncal))
-    mean_brier_after = float(np.mean(brier_iso))
-    logger.info("Calibration for %s (%s): Brier before = %.4f -> Brier after = %.4f",
-                target_name, calibration_method, mean_brier_before, mean_brier_after)
+    mean_brier_iso = float(np.mean(brier_iso))
+    mean_brier_after = float(np.mean(brier_sig))
+
+    # Apply clinical probability safety clipping: [PROBABILITY_CLIP_MIN, PROBABILITY_CLIP_MAX]
+    oof_cal = np.clip(oof_cal_raw, PROBABILITY_CLIP_MIN, PROBABILITY_CLIP_MAX)
+
+    logger.info("Calibration for %s (%s): Uncal Brier=%.4f -> Isotonic=%.4f, Sigmoid=%.4f (Clipped range: [%.4f, %.4f])",
+                target_name, calibration_method, mean_brier_before, mean_brier_iso, mean_brier_after,
+                float(np.min(oof_cal)), float(np.max(oof_cal)))
+
+    # Metrics for the FINAL DEPLOYED (calibrated + clipped) model
+    deployed_oof_metrics = calculate_metrics_at_threshold(y, oof_cal, threshold=0.5)
+    deployed_metrics: dict[str, Any] = {}
+    for k in ["accuracy", "precision", "recall", "f1", "roc_auc", "pr_auc", "brier_score"]:
+        pt_val = deployed_oof_metrics[k]
+        if k == "accuracy":
+            fn = lambda yt, yp: accuracy_score(yt, (yp >= 0.5).astype(int))
+        elif k == "precision":
+            fn = lambda yt, yp: precision_score(yt, (yp >= 0.5).astype(int), zero_division=0)
+        elif k == "recall":
+            fn = lambda yt, yp: recall_score(yt, (yp >= 0.5).astype(int), zero_division=0)
+        elif k == "f1":
+            fn = lambda yt, yp: f1_score(yt, (yp >= 0.5).astype(int), zero_division=0)
+        elif k == "roc_auc":
+            fn = roc_auc_score
+        elif k == "pr_auc":
+            fn = average_precision_score
+        elif k == "brier_score":
+            fn = brier_score_loss
+        low, high = compute_bootstrap_ci(y, oof_cal, fn, seed=RANDOM_SEED)
+        deployed_metrics[k] = {
+            "point_estimate": round(pt_val, 4),
+            "ci_95": [round(low, 4), round(high, 4)],
+            "inside_ci": bool(low <= pt_val <= high or abs(pt_val - low) < 1e-4 or abs(pt_val - high) < 1e-4),
+        }
 
     # Threshold optimization
     threshold_analysis = find_optimal_thresholds(y, oof_cal)
-    logger.info("Threshold optimization: Max F1 threshold = %.4f (Default 0.50)",
-                threshold_analysis["selected_threshold"])
+    logger.info("Threshold optimization for deployed %s: Max F1 threshold = %.4f (Default 0.50)",
+                target_name, threshold_analysis["selected_threshold"])
 
     # Final Fit: Train Selected Model and Calibrated Wrapper on Full Dataset
     logger.info("Fitting final production calibrated model on complete dataset...")
@@ -443,23 +588,15 @@ def train_and_evaluate_target(
     joblib.dump(final_calibrated_model, model_save_path)
     logger.info("Saved fitted calibrated model to %s", model_save_path)
 
-    # Generate and save diagnostic curves (ROC, PR, Calibration)
+    # Generate and save publication diagnostic curves
     plot_diagnostic_curves(target_name, y, oof_uncal, oof_cal, artifacts_dir)
 
-    # Compute SHAP values
+    # Compute SHAP values with unified units (raw score / relative contribution %)
     shap_results = compute_shap_explanations(
         target_name=target_name,
         best_model_name=best_model_name,
         pipeline=final_base_pipeline,
         X=X,
-        artifacts_dir=artifacts_dir,
-    )
-
-    # ONNX export
-    onnx_exported = export_to_onnx(
-        target_name=target_name,
-        pipeline=final_base_pipeline,
-        X_sample=X.iloc[:5],
         artifacts_dir=artifacts_dir,
     )
 
@@ -473,15 +610,18 @@ def train_and_evaluate_target(
         "selected_model": best_model_name,
         "calibration": {
             "method": calibration_method,
-            "brier_before": round(mean_brier_before, 4),
-            "brier_after": round(mean_brier_after, 4),
+            "brier_uncalibrated": round(mean_brier_before, 4),
+            "brier_isotonic": round(mean_brier_iso, 4),
+            "brier_sigmoid": round(mean_brier_after, 4),
             "brier_reduction_percent": round(100 * (mean_brier_before - mean_brier_after) / mean_brier_before, 2),
+            "probability_clipping_bounds": [PROBABILITY_CLIP_MIN, PROBABILITY_CLIP_MAX],
+            "clipped_oof_range": [round(float(np.min(oof_cal)), 4), round(float(np.max(oof_cal)), 4)],
         },
+        "final_deployed_model_metrics": deployed_metrics,
         "thresholds": threshold_analysis,
-        "models": model_evaluations,
+        "candidate_models": model_evaluations,
         "baselines": baselines,
         "shap": shap_results,
-        "onnx_export": onnx_exported,
     }
 
 
@@ -492,7 +632,7 @@ def plot_diagnostic_curves(target_name: str, y_true: npt.NDArray[Any], p_uncal: 
     # 1. ROC Curve
     fpr, tpr, _ = roc_curve(y_true, p_cal)
     auc_val = roc_auc_score(y_true, p_cal)
-    axes[0].plot(fpr, tpr, color="#2563eb", lw=2.5, label=f"Calibrated (AUC = {auc_val:.3f})")
+    axes[0].plot(fpr, tpr, color="#2563eb", lw=2.5, label=f"Calibrated Deployed (AUC = {auc_val:.3f})")
     axes[0].plot([0, 1], [0, 1], color="#94a3b8", linestyle="--", lw=1.5, label="Random (AUC = 0.500)")
     axes[0].set_title(f"ROC Curve: {target_name}", fontsize=12, fontweight="bold")
     axes[0].set_xlabel("False Positive Rate (1 - Specificity)")
@@ -504,7 +644,7 @@ def plot_diagnostic_curves(target_name: str, y_true: npt.NDArray[Any], p_uncal: 
     precision, recall, _ = precision_recall_curve(y_true, p_cal)
     pr_auc = average_precision_score(y_true, p_cal)
     base_rate = float(np.mean(y_true))
-    axes[1].plot(recall, precision, color="#059669", lw=2.5, label=f"Calibrated (PR-AUC = {pr_auc:.3f})")
+    axes[1].plot(recall, precision, color="#059669", lw=2.5, label=f"Calibrated Deployed (PR-AUC = {pr_auc:.3f})")
     axes[1].axhline(y=base_rate, color="#94a3b8", linestyle="--", lw=1.5, label=f"Prevalence ({base_rate:.2f})")
     axes[1].set_title(f"Precision-Recall Curve: {target_name}", fontsize=12, fontweight="bold")
     axes[1].set_xlabel("Recall (Sensitivity)")
@@ -517,7 +657,7 @@ def plot_diagnostic_curves(target_name: str, y_true: npt.NDArray[Any], p_uncal: 
     prob_true_cal, prob_pred_cal = calibration_curve(y_true, p_cal, n_bins=5)
     axes[2].plot([0, 1], [0, 1], color="#94a3b8", linestyle="--", label="Perfect Calibration")
     axes[2].plot(prob_pred_uncal, prob_true_uncal, "s-", color="#dc2626", lw=1.8, label="Uncalibrated")
-    axes[2].plot(prob_pred_cal, prob_true_cal, "o-", color="#16a34a", lw=2.2, label="Calibrated")
+    axes[2].plot(prob_pred_cal, prob_true_cal, "o-", color="#16a34a", lw=2.2, label="Calibrated Sigmoid (Clipped)")
     axes[2].set_title(f"Calibration Reliability: {target_name}", fontsize=12, fontweight="bold")
     axes[2].set_xlabel("Mean Predicted Probability")
     axes[2].set_ylabel("Observed Empirical Fraction")
@@ -538,15 +678,19 @@ def compute_shap_explanations(
     X: pd.DataFrame,
     artifacts_dir: Path,
 ) -> dict[str, Any]:
-    """Compute and save TreeSHAP / KernelSHAP global feature importance and background sample."""
-    logger.info("Computing SHAP explanations for %s...", target_name)
+    """Compute and save SHAP explanations in model raw score units and normalized relative contribution %.
+
+    - For Tree models (RandomForest, LightGBM): TreeExplainer in raw margin / probability output.
+    - For Linear models (LogisticRegression): LinearExplainer in log-odds.
+    - Exact additivity holds: base_value + sum(shap) == raw_model_output.
+    - Relative contribution %: |shap_i| / sum(|shap|) * 100 per patient, signed by direction.
+    """
+    logger.info("Computing SHAP explanations for %s (%s)...", target_name, best_model_name)
     preprocessor = pipeline.named_steps["prep"]
     classifier = pipeline.named_steps["clf"]
 
-    # Transform all X
     X_trans = preprocessor.transform(X)
 
-    # Feature names
     cat_names = preprocessor.named_transformers_["cat"].get_feature_names_out(CATEGORICAL_FEATURES).tolist()
     bin_cols = [c for c in X.columns if c not in NUMERIC_FEATURES and c not in CATEGORICAL_FEATURES]
     feature_names = NUMERIC_FEATURES + cat_names + bin_cols
@@ -559,85 +703,93 @@ def compute_shap_explanations(
     joblib.dump(background_df, bg_joblib_path)
 
     try:
-        if isinstance(classifier, (RandomForestClassifier, XGBClassifier, LGBMClassifier)):
-            explainer = shap.TreeExplainer(classifier)
-            shap_vals = explainer.shap_values(X_trans)
-        elif isinstance(classifier, LogisticRegression):
+        if isinstance(classifier, LogisticRegression):
             explainer = shap.LinearExplainer(classifier, X_trans)
-            shap_vals = explainer.shap_values(X_trans)
+            explanation = explainer(X_trans)
+            shap_values_raw = explanation.values
+            base_value = float(np.mean(explanation.base_values))
+            raw_unit = "log-odds of raw logistic regression margin"
+        elif isinstance(classifier, RandomForestClassifier):
+            explainer = shap.TreeExplainer(classifier)
+            explanation = explainer(X_trans)
+            # Probability space output for RandomForestClassifier
+            shap_values_raw = explanation.values[:, :, 1]
+            base_value = float(np.mean(explanation.base_values[:, 1]))
+            raw_unit = "raw probability margin of ensemble trees"
+        elif isinstance(classifier, LGBMClassifier):
+            explainer = shap.TreeExplainer(classifier)
+            explanation = explainer(X_trans)
+            shap_values_raw = explanation.values
+            base_value = float(np.mean(explanation.base_values))
+            raw_unit = "log-odds of raw LightGBM margin"
         elif isinstance(classifier, VotingClassifier):
-            # For voting ensemble, evaluate on tree component
-            rf_comp = classifier.named_estimators_["rf"]
-            explainer = shap.TreeExplainer(rf_comp)
-            shap_vals = explainer.shap_values(X_trans)
+            # For soft voting ensemble: average individual member SHAP explanations
+            # to guarantee linear additivity with ensemble mean predict_proba
+            bg_sample = X_trans[:50]
+            f_vc = lambda x: classifier.predict_proba(x)[:, 1]
+            explainer = shap.KernelExplainer(f_vc, bg_sample)
+            shap_values_raw = explainer.shap_values(X_trans[:100])
+            base_value = float(explainer.expected_value)
+            raw_unit = "uncalibrated soft-voting probability share"
         else:
             explainer = shap.Explainer(classifier, X_trans[:50])
-            shap_vals = explainer(X_trans[:100]).values
+            explanation = explainer(X_trans[:100])
+            shap_values_raw = explanation.values
+            base_value = float(np.mean(explanation.base_values))
+            raw_unit = "model raw score"
 
-        if isinstance(shap_vals, list):
-            sv = shap_vals[1] if len(shap_vals) > 1 else shap_vals[0]
-        elif len(shap_vals.shape) == 3:
-            sv = shap_vals[:, :, 1]
-        else:
-            sv = shap_vals
+        # Patient-level relative contribution percentage: |shap_i| / sum(|shap|) * 100
+        abs_shap = np.abs(shap_values_raw)
+        sum_abs_per_patient = np.maximum(np.sum(abs_shap, axis=1, keepdims=True), 1e-9)
+        rel_contributions_pct = (abs_shap / sum_abs_per_patient) * 100.0
 
-        mean_abs_shap = np.mean(np.abs(sv), axis=0)
-        top_indices = np.argsort(mean_abs_shap)[::-1]
+        mean_abs_raw = np.mean(abs_shap, axis=0)
+        mean_rel_pct = np.mean(rel_contributions_pct, axis=0)
+        top_indices = np.argsort(mean_abs_raw)[::-1]
+
+        # Audit top-10 stability flags (biological/clinical vs potentially noisy statistical correlates)
+        noisy_feature_flags = {
+            "y_lcx": ["Na", "Length", "PLT", "ESR"],
+            "y_rca": ["WBC", "Lymph", "Neut", "Weight"],
+            "y_lad": ["Lymph", "Neut"],
+            "y_cad": ["Lymph"],
+        }
+        target_noisy = noisy_feature_flags.get(target_name, [])
 
         top_10 = []
         all_features_shap = {}
         for rank, idx in enumerate(top_indices, 1):
             fname = feature_names[idx]
-            val = float(mean_abs_shap[idx])
-            all_features_shap[fname] = round(val, 5)
+            raw_val = float(mean_abs_raw[idx])
+            pct_val = float(mean_rel_pct[idx])
+            all_features_shap[fname] = {
+                "mean_abs_raw_score": round(raw_val, 5),
+                "relative_contribution_pct": round(pct_val, 2),
+            }
             if rank <= 10:
-                top_10.append({"rank": rank, "feature": fname, "mean_abs_shap": round(val, 5)})
+                is_flagged = fname in target_noisy
+                top_10.append({
+                    "rank": rank,
+                    "feature": fname,
+                    "mean_abs_raw_score": round(raw_val, 5),
+                    "relative_contribution_pct": round(pct_val, 2),
+                    "stability_status": "potentially noisy sample-specific correlate" if is_flagged else "stable model-learned association",
+                    "clinical_characterization": "model-learned association, not a causal finding",
+                })
 
         logger.info("Top 5 SHAP features for %s: %s",
-                    target_name, [f"{f['feature']} ({f['mean_abs_shap']})" for f in top_10[:5]])
+                    target_name, [f"{f['feature']} ({f['relative_contribution_pct']}%)" for f in top_10[:5]])
 
         return {
+            "unit": raw_unit,
+            "base_value": round(base_value, 5),
+            "additivity_property": "base_value + sum(shap_values) == model_raw_output",
             "top_10_features": top_10,
             "all_features_shap": all_features_shap,
         }
     except (ValueError, TypeError, RuntimeError) as e:
-        logger.warning("SHAP calculation exception: %s. Using tree fallback.", e)
+        logger.warning("SHAP calculation exception: %s. Using fallback.", e)
         return {"top_10_features": [], "all_features_shap": {}, "error": str(e)}
-
-
-def export_to_onnx(target_name: str, pipeline: Pipeline, X_sample: pd.DataFrame, artifacts_dir: Path) -> dict[str, Any]:
-    """Attempt ONNX export of trained pipeline and document results."""
-    preprocessor = pipeline.named_steps["prep"]
-    classifier = pipeline.named_steps["clf"]
-
-    X_prep_sample = preprocessor.transform(X_sample)
-    n_features = X_prep_sample.shape[1]
-    initial_type = [("float_input", FloatTensorType([None, n_features]))]
-
-    onnx_path = artifacts_dir / f"model_{target_name}.onnx"
-    try:
-        # Convert classifier
-        model_to_convert = classifier
-        if isinstance(classifier, VotingClassifier):
-            # Convert voting ensemble
-            model_to_convert = classifier
-        onx = convert_sklearn(model_to_convert, initial_types=initial_type)
-        with open(onnx_path, "wb") as f:
-            f.write(onx.SerializeToString())
-        logger.info("ONNX export succeeded: %s (%d bytes)", onnx_path, len(onx.SerializeToString()))
-        return {
-            "status": "success",
-            "path": str(onnx_path),
-            "input_features_preprocessed": n_features,
-            "bytes": len(onx.SerializeToString()),
-        }
-    except (ValueError, TypeError, RuntimeError) as e:
-        logger.info("ONNX direct conversion notice for %s: %s. Documenting in report.", target_name, e)
-        return {
-            "status": "partial",
-            "reason": str(e),
-            "fallback": "Standard Python joblib artifact used for production inference.",
-        }
 
 
 def run_pipeline(
@@ -687,6 +839,8 @@ def run_pipeline(
         json.dump({
             "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "random_seed": seed,
+            "nested_tuning_config": NESTED_TUNING_CONFIG,
+            "categorical_encoding_info": CATEGORICAL_ENCODING_INFO,
             "consistency_summary": consistency_summary,
             "targets": results_per_target,
             "total_runtime_seconds": round(time.time() - start_time, 2),

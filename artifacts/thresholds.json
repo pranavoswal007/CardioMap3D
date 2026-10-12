@@ -1,107 +1,107 @@
 {
   "y_cad": {
     "default_threshold": 0.5,
-    "youden_j_threshold": 0.7422,
-    "max_f1_threshold": 0.5,
-    "selected_threshold": 0.5,
+    "youden_j_threshold": 0.7928,
+    "max_f1_threshold": 0.5377,
+    "selected_threshold": 0.5377,
     "tradeoffs": [
       {
         "threshold": 0.1,
-        "sensitivity": 0.9861,
-        "specificity": 0.2414
+        "sensitivity": 0.9907,
+        "specificity": 0.1149
       },
       {
         "threshold": 0.2,
-        "sensitivity": 0.9676,
-        "specificity": 0.4368
+        "sensitivity": 0.9769,
+        "specificity": 0.4023
       },
       {
         "threshold": 0.3,
-        "sensitivity": 0.9537,
-        "specificity": 0.5287
+        "sensitivity": 0.9583,
+        "specificity": 0.5172
       },
       {
         "threshold": 0.4,
-        "sensitivity": 0.9491,
-        "specificity": 0.6322
+        "sensitivity": 0.9444,
+        "specificity": 0.6092
       },
       {
         "threshold": 0.5,
-        "sensitivity": 0.9398,
-        "specificity": 0.7011
+        "sensitivity": 0.9352,
+        "specificity": 0.6782
       },
       {
         "threshold": 0.6,
-        "sensitivity": 0.8981,
-        "specificity": 0.7931
+        "sensitivity": 0.912,
+        "specificity": 0.7356
       },
       {
         "threshold": 0.7,
-        "sensitivity": 0.8519,
-        "specificity": 0.8966
+        "sensitivity": 0.8796,
+        "specificity": 0.8276
       },
       {
         "threshold": 0.8,
-        "sensitivity": 0.7731,
-        "specificity": 0.9425
+        "sensitivity": 0.8009,
+        "specificity": 0.931
       },
       {
         "threshold": 0.9,
         "sensitivity": 0.7037,
-        "specificity": 0.9655
+        "specificity": 0.977
       }
     ]
   },
   "y_lad": {
     "default_threshold": 0.5,
-    "youden_j_threshold": 0.5237,
-    "max_f1_threshold": 0.403,
-    "selected_threshold": 0.403,
+    "youden_j_threshold": 0.5271,
+    "max_f1_threshold": 0.5006,
+    "selected_threshold": 0.5006,
     "tradeoffs": [
       {
         "threshold": 0.1,
-        "sensitivity": 0.9887,
-        "specificity": 0.119
+        "sensitivity": 1.0,
+        "specificity": 0.0238
       },
       {
         "threshold": 0.2,
-        "sensitivity": 0.9548,
-        "specificity": 0.3492
+        "sensitivity": 0.9661,
+        "specificity": 0.2698
       },
       {
         "threshold": 0.3,
-        "sensitivity": 0.9322,
-        "specificity": 0.4841
+        "sensitivity": 0.9492,
+        "specificity": 0.4603
       },
       {
         "threshold": 0.4,
-        "sensitivity": 0.9153,
-        "specificity": 0.5873
+        "sensitivity": 0.9096,
+        "specificity": 0.5635
       },
       {
         "threshold": 0.5,
-        "sensitivity": 0.8475,
-        "specificity": 0.6905
+        "sensitivity": 0.887,
+        "specificity": 0.6746
       },
       {
         "threshold": 0.6,
-        "sensitivity": 0.7571,
-        "specificity": 0.7778
+        "sensitivity": 0.7966,
+        "specificity": 0.7619
       },
       {
         "threshold": 0.7,
-        "sensitivity": 0.6271,
-        "specificity": 0.8492
+        "sensitivity": 0.6215,
+        "specificity": 0.8651
       },
       {
         "threshold": 0.8,
-        "sensitivity": 0.5028,
-        "specificity": 0.9127
+        "sensitivity": 0.4407,
+        "specificity": 0.9286
       },
       {
         "threshold": 0.9,
-        "sensitivity": 0.2994,
-        "specificity": 0.9524
+        "sensitivity": 0.1751,
+        "specificity": 0.9841
       }
     ]
   },
@@ -160,44 +160,44 @@
   },
   "y_rca": {
     "default_threshold": 0.5,
-    "youden_j_threshold": 0.3687,
-    "max_f1_threshold": 0.3049,
-    "selected_threshold": 0.3049,
+    "youden_j_threshold": 0.4189,
+    "max_f1_threshold": 0.3354,
+    "selected_threshold": 0.3354,
     "tradeoffs": [
       {
         "threshold": 0.1,
         "sensitivity": 1.0,
-        "specificity": 0.0
+        "specificity": 0.0053
       },
       {
         "threshold": 0.2,
-        "sensitivity": 0.9561,
-        "specificity": 0.1799
+        "sensitivity": 0.9912,
+        "specificity": 0.1481
       },
       {
         "threshold": 0.3,
-        "sensitivity": 0.8421,
-        "specificity": 0.4868
+        "sensitivity": 0.8509,
+        "specificity": 0.4444
       },
       {
         "threshold": 0.4,
-        "sensitivity": 0.6228,
-        "specificity": 0.6984
+        "sensitivity": 0.6491,
+        "specificity": 0.6931
       },
       {
         "threshold": 0.5,
-        "sensitivity": 0.386,
-        "specificity": 0.836
+        "sensitivity": 0.3684,
+        "specificity": 0.8942
       },
       {
         "threshold": 0.6,
-        "sensitivity": 0.2105,
-        "specificity": 0.9153
+        "sensitivity": 0.1404,
+        "specificity": 0.9577
       },
       {
         "threshold": 0.7,
-        "sensitivity": 0.0614,
-        "specificity": 0.9841
+        "sensitivity": 0.0263,
+        "specificity": 0.9947
       },
       {
         "threshold": 0.8,

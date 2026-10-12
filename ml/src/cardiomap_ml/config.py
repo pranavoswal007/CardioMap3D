@@ -35,6 +35,10 @@ TARGET_ENCODINGS: dict[str, dict[str, int]] = {
 # Exact forbidden target set: LAD, LCX, RCA, Cath, plus target label CAD
 FORBIDDEN_TARGET_NAMES: tuple[str, ...] = ("LAD", "LCX", "RCA", "Cath", "CAD")
 
+# Calibration probability clipping bounds for clinical inference safety
+PROBABILITY_CLIP_MIN: float = 0.01
+PROBABILITY_CLIP_MAX: float = 0.99
+
 
 def normalize_column_name(name: str) -> str:
     """Normalize a column name by stripping parenthetical notes, whitespace, lowercasing, and removing separators."""
