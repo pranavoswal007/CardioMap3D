@@ -70,14 +70,14 @@ def main() -> None:
 
     # 2. Test /predict parity
     print("\n--- 1. Testing /predict parity ---")
-    pred_orig, raw_orig = fetch_json(f"http://127.0.0.1:{PORT_ORIG}/predict", sample_patient)
-    pred_clone, raw_clone = fetch_json(f"http://127.0.0.1:{PORT_CLONE}/predict", sample_patient)
+    pred_orig, _raw_orig = fetch_json(f"http://127.0.0.1:{PORT_ORIG}/predict", sample_patient)
+    pred_clone, _raw_clone = fetch_json(f"http://127.0.0.1:{PORT_CLONE}/predict", sample_patient)
 
     print("API Output Precision: API schemas explicitly format probabilities with round(p, 4) (precision 1e-4).")
     pred_diffs = compare_json_exact(pred_orig, pred_clone)
     if not pred_diffs:
         print("PASS: /predict responses are IDENTICAL across all fields.")
-        print(f"Sample predict target probabilities:")
+        print("Sample predict target probabilities:")
         p_cad1 = pred_orig["cad"]["probability"]
         p_cad2 = pred_clone["cad"]["probability"]
         print(f"  CAD: orig={p_cad1:.4f}, clone={p_cad2:.4f}, diff={abs(p_cad1 - p_cad2)}")

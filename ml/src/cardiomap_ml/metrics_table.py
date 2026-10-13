@@ -14,17 +14,70 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+import numpy.typing as npt
 from lightgbm import LGBMClassifier
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.ensemble import RandomForestClassifier, VotingClassifier
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import accuracy_score, balanced_accuracy_score, f1_score, recall_score
-from sklearn.model_selection import StratifiedKFold
+from sklearn.metrics import (
+    accuracy_score,
+    balanced_accuracy_score,
+    f1_score,
+    recall_score,
+    roc_auc_score,
+)
+from sklearn.model_selection import RepeatedStratifiedKFold, StratifiedKFold
 from sklearn.pipeline import Pipeline
 from xgboost import XGBClassifier
 
 from .config import PROBABILITY_CLIP_MAX, PROBABILITY_CLIP_MIN, RANDOM_SEED
-from .train import create_preprocessor, load_dataset
+from .train import CLINICAL_SUBSET, create_preprocessor, load_dataset
+
+
+def compute_paired_bootstrap(
+    y: npt.NDArray[Any],
+    y_pred_deployed: npt.NDArray[Any],
+    y_pred_baseline: npt.NDArray[Any],
+    n_resamples: int = 1000,
+    seed: int = RANDOM_SEED,
+) -> dict[str, Any]:
+    """Compute patient-level paired bootstrap (B=1000) of AUC(deployed) - AUC(baseline)."""
+    rng = np.random.RandomState(seed)
+    n_samples = len(y)
+    auc_dep = float(roc_auc_score(y, y_pred_deployed))
+    auc_base = float(roc_auc_score(y, y_pred_baseline))
+    diff_pt = auc_dep - auc_base
+
+    diffs: list[float] = []
+    for _ in range(n_resamples):
+        idx = rng.randint(0, n_samples, n_samples)
+        if len(np.unique(y[idx])) < 2:
+            continue
+        auc_d = roc_auc_score(y[idx], y_pred_deployed[idx])
+        auc_b = roc_auc_score(y[idx], y_pred_baseline[idx])
+        diffs.append(float(auc_d - auc_b))
+
+    arr_diffs = np.array(diffs, dtype=np.float64)
+    ci_low = float(np.percentile(arr_diffs, 2.5))
+    ci_high = float(np.percentile(arr_diffs, 97.5))
+    frac_gt = float(np.mean(arr_diffs > 0))
+    excludes_zero = bool(ci_low > 0 or ci_high < 0)
+
+    return {
+        "baseline_model": "clinical_subset_lr",
+        "clinical_features": list(CLINICAL_SUBSET),
+        "deployed_roc_auc": round(auc_dep, 4),
+        "baseline_roc_auc": round(auc_base, 4),
+        "delta_auc": round(diff_pt, 4),
+        "ci_95": [round(ci_low, 4), round(ci_high, 4)],
+        "fraction_deployed_superior": round(frac_gt, 4),
+        "excludes_zero": excludes_zero,
+        "significance": (
+            "statistically superior (95% CI excludes 0)"
+            if excludes_zero
+            else "not significantly different (95% CI includes 0)"
+        ),
+    }
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -180,6 +233,31 @@ def compute_baseline_table(
 
         roc_info = metrics["targets"][target]["final_deployed_model_metrics"]["roc_auc"]
 
+        # Compute clinical subset LR OOF predictions on RepeatedStratifiedKFold
+        X_clin = X[CLINICAL_SUBSET]
+        prep_clin = create_preprocessor(CLINICAL_SUBSET)
+        lr_clin = Pipeline(
+            [
+                ("prep", prep_clin),
+                (
+                    "clf",
+                    LogisticRegression(
+                        random_state=RANDOM_SEED, class_weight="balanced", max_iter=1000
+                    ),
+                ),
+            ]
+        )
+        rskf = RepeatedStratifiedKFold(n_splits=5, n_repeats=5, random_state=RANDOM_SEED)
+        oof_clin = np.zeros(len(y), dtype=np.float64)
+        for tr, val in rskf.split(X, y):
+            lr_clin.fit(X_clin.iloc[tr], y[tr])
+            oof_clin[val] += lr_clin.predict_proba(X_clin.iloc[val])[:, 1]
+        oof_clin /= 5.0
+
+        paired_boot = compute_paired_bootstrap(
+            y, oof_cal, oof_clin, n_resamples=1000, seed=RANDOM_SEED
+        )
+
         baseline_table[target] = {
             "selected_model": model_name,
             "cohort_prevalence": {
@@ -203,6 +281,7 @@ def compute_baseline_table(
                 round(float(roc_info["ci_95"][0]), 4),
                 round(float(roc_info["ci_95"][1]), 4),
             ],
+            "paired_bootstrap_vs_clinical_lr": paired_boot,
         }
 
     return baseline_table
@@ -217,10 +296,47 @@ def update_metrics_json(
         metrics_data = json.load(f)
 
     metrics_data["baseline_comparison_table"] = baseline_table
+    for target, row in baseline_table.items():
+        if (
+            "paired_bootstrap_vs_clinical_lr" in row
+            and "targets" in metrics_data
+            and target in metrics_data["targets"]
+        ):
+            t_obj = metrics_data["targets"][target]
+            if "baselines" in t_obj and "clinical_subset_lr" in t_obj["baselines"]:
+                t_obj["baselines"]["clinical_subset_lr"]["paired_bootstrap"] = row[
+                    "paired_bootstrap_vs_clinical_lr"
+                ]
 
     with open(metrics_path, "w", encoding="utf-8") as f:
         json.dump(metrics_data, f, indent=2)
-    logger.info("Updated %s with baseline_comparison_table.", metrics_path)
+    logger.info("Updated %s with baseline_comparison_table and paired bootstrap.", metrics_path)
+
+
+def generate_paired_bootstrap_markdown_table(table: dict[str, Any]) -> str:
+    """Generate Markdown table for paired bootstrap vs 6-feature clinical LR baseline."""
+    lines = [
+        "| Target | Deployed Model | Deployed Calibrated ROC-AUC | Clinical Baseline ROC-AUC (6 features) | Paired $\\Delta$ AUC [95% CI] | Fraction Deployed > Baseline | Significance Assessment |",
+        "| :--- | :--- | :---: | :---: | :---: | :---: | :--- |",
+    ]
+    for target in ["y_cad", "y_lad", "y_lcx", "y_rca"]:
+        row = table[target]
+        pb = row.get("paired_bootstrap_vs_clinical_lr", {})
+        m_name = row["selected_model"]
+        dep_auc = f"{pb.get('deployed_roc_auc', row['roc_auc']):.4f}"
+        base_auc = f"{pb.get('baseline_roc_auc', 0.0):.4f}"
+        ci_str = f"[{pb.get('ci_95', [0.0, 0.0])[0]:.4f}, {pb.get('ci_95', [0.0, 0.0])[1]:.4f}]"
+        delta_str = f"**{pb.get('delta_auc', 0.0):+.4f}** {ci_str}"
+        frac_str = f"**{pb.get('fraction_deployed_superior', 0.0) * 100:.1f}%**"
+        sig_str = (
+            "**Statistically superior** (95% CI excludes 0)"
+            if pb.get("excludes_zero")
+            else "not significantly different (95% CI includes 0)"
+        )
+        lines.append(
+            f"| **`{target}`** | {m_name} | **{dep_auc}** | {base_auc} | {delta_str} | {frac_str} | {sig_str} |"
+        )
+    return "\n".join(lines)
 
 
 def generate_markdown_table_model_card(table: dict[str, Any]) -> str:
@@ -290,8 +406,23 @@ def update_docs(table: dict[str, Any], docs_dir: Path = Path("docs")) -> None:
         f"lifting $F_1$ to ${lcx_f1:.4f}$ and ${rca_f1:.4f}$",
     )
 
+    # Add/Update paired bootstrap table in model_card.md
+    pb_table = generate_paired_bootstrap_markdown_table(table)
+    pattern_mc_pb = re.compile(
+        r"\| Target \| Deployed Model \| Deployed Calibrated ROC-AUC.*?\n\| \*\*`y_rca`\*\*.*?\n",
+        re.DOTALL,
+    )
+    if pattern_mc_pb.search(mc_content):
+        mc_content = pattern_mc_pb.sub(pb_table + "\n", mc_content)
+    else:
+        # Append after the first baseline table
+        mc_content = mc_content.replace(
+            mc_table,
+            mc_table + "\n\n#### Paired Bootstrap Comparison vs. 6-Feature Clinical LR Baseline ($B=1000$, seed=42)\n" + pb_table,
+        )
+
     model_card_path.write_text(mc_content, encoding="utf-8")
-    logger.info("Updated %s with regenerated baseline table.", model_card_path)
+    logger.info("Updated %s with regenerated baseline and paired bootstrap tables.", model_card_path)
 
     # 2. Update evaluation_report.md
     eval_report_path = docs_dir / "evaluation_report.md"
@@ -307,8 +438,20 @@ def update_docs(table: dict[str, Any], docs_dir: Path = Path("docs")) -> None:
     else:
         logger.warning("Could not find table pattern in %s", eval_report_path)
 
+    pattern_er_pb = re.compile(
+        r"\| Target \| Deployed Model \| Deployed Calibrated ROC-AUC.*?\n\| \*\*`y_rca`\*\*.*?\n",
+        re.DOTALL,
+    )
+    if pattern_er_pb.search(er_content):
+        er_content = pattern_er_pb.sub(pb_table + "\n", er_content)
+    else:
+        er_content = er_content.replace(
+            er_table,
+            er_table + "\n\n#### Paired Bootstrap Comparison vs. 6-Feature Clinical LR Baseline ($B=1000$, seed=42)\n" + pb_table,
+        )
+
     eval_report_path.write_text(er_content, encoding="utf-8")
-    logger.info("Updated %s with regenerated baseline table.", eval_report_path)
+    logger.info("Updated %s with regenerated baseline and paired bootstrap tables.", eval_report_path)
 
 
 def main() -> None:

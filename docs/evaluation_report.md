@@ -89,6 +89,14 @@ In clinical cohorts with class imbalance, comparing model operating points again
 | **`y_lcx`** | **39.27% (119 / 303)** | 0.5640 | 0.4674 | **0.3973** | **0.6491** | **+0.0851** | 0.6983 |
 | **`y_rca`** | **37.62% (114 / 303)** | 0.5468 | 0.4773 | **0.3354** | **0.6341** | **+0.0874** | 0.6822 |
 
+#### Paired Bootstrap Comparison vs. 6-Feature Clinical LR Baseline ($B=1000$, seed=42)
+| Target | Deployed Model | Deployed Calibrated ROC-AUC | Clinical Baseline ROC-AUC (6 features) | Paired $\Delta$ AUC [95% CI] | Fraction Deployed > Baseline | Significance Assessment |
+| :--- | :--- | :---: | :---: | :---: | :---: | :--- |
+| **`y_cad`** | SoftVotingEnsemble | **0.9256** | 0.9032 | **+0.0225** [-0.0018, 0.0472] | **96.2%** | not significantly different (95% CI includes 0) |
+| **`y_lad`** | RandomForest | **0.8453** | 0.7901 | **+0.0552** [0.0169, 0.0967] | **99.7%** | **Statistically superior** (95% CI excludes 0) |
+| **`y_lcx`** | LightGBM | **0.7235** | 0.7429 | **-0.0195** [-0.0607, 0.0251] | **19.3%** | not significantly different (95% CI includes 0) |
+| **`y_rca`** | LGBM_Shallow | **0.7397** | 0.7412 | **-0.0015** [-0.0466, 0.0448] | **47.7%** | not significantly different (95% CI includes 0) |
+
 #### Clinical Context: Why LCX & RCA Thresholds Fall Near or Below Cohort Prevalence
 - For LCX and RCA, prevalence in this registry is ~38–39%. Uncalibrated 0.50 decision thresholds heavily penalize the positive class, producing low default $F_1$ scores (0.4674 and 0.4773) that underperform the trivial baseline.
 - Pre-catheterization screening requires high sensitivity to avoid missing treatable stenosis. Optimizing decision thresholds via Youden's $J$ and Max $F_1$ shifts the operating point to $0.3973$ (LCX) and $0.3354$ (RCA).
@@ -144,6 +152,8 @@ In Phase 2.5, explanations were upgraded across all four targets to explain the 
   - `y_lcx` (LightGBM): 2.90 / 5 (58.0%) top-5 agreement
   - `y_rca` (LGBM_Shallow): 3.65 / 5 (73.0%) top-5 agreement
   Overall tree target agreement averages 64.3%, reflecting the progression from fold-0 uncalibrated tree margin scores to the full 5-fold calibrated probability pipeline.
+- **High-Fidelity Reference Agreement (HEAD Settings)**: 20-patient reference benchmark ($nsamples=3000$, 100 background points) vs production explainer ($nsamples=150$, 30 background points) yields **Mean Top-3 Overlap = 2.50 / 3 (83.33%)** and **Mean Spearman rank correlation = 0.6974**.
+- **Age Perturbation Stability**: Perturbing Age by +1 year across 20 patients preserves top-3 features for 20 of 20 patients (**100.0%**, exceeding the 90% stability target).
 
 ### Top 10 SHAP Features and Stability Audit
 *Features are characterized neutrally as **"model-learned associations, not causal findings"**. Ranking stability was evaluated across 20 bootstrap resamples:*

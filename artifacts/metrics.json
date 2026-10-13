@@ -852,7 +852,28 @@
           "f1": 0.8980582524271845,
           "roc_auc": 0.9031502767134951,
           "pr_auc": 0.945626773299012,
-          "brier_score": 0.11708376268832546
+          "brier_score": 0.11708376268832546,
+          "paired_bootstrap": {
+            "baseline_model": "clinical_subset_lr",
+            "clinical_features": [
+              "Age",
+              "Sex",
+              "HTN",
+              "DM",
+              "Current Smoker",
+              "Typical Chest Pain"
+            ],
+            "deployed_roc_auc": 0.9256,
+            "baseline_roc_auc": 0.9032,
+            "delta_auc": 0.0225,
+            "ci_95": [
+              -0.0018,
+              0.0472
+            ],
+            "fraction_deployed_superior": 0.962,
+            "excludes_zero": false,
+            "significance": "not significantly different (95% CI includes 0)"
+          }
         }
       },
       "shap": {
@@ -1841,7 +1862,28 @@
           "f1": 0.7784090909090909,
           "roc_auc": 0.7900636714196037,
           "pr_auc": 0.7948282165963263,
-          "brier_score": 0.1801153290397355
+          "brier_score": 0.1801153290397355,
+          "paired_bootstrap": {
+            "baseline_model": "clinical_subset_lr",
+            "clinical_features": [
+              "Age",
+              "Sex",
+              "HTN",
+              "DM",
+              "Current Smoker",
+              "Typical Chest Pain"
+            ],
+            "deployed_roc_auc": 0.8453,
+            "baseline_roc_auc": 0.7901,
+            "delta_auc": 0.0552,
+            "ci_95": [
+              0.0169,
+              0.0967
+            ],
+            "fraction_deployed_superior": 0.997,
+            "excludes_zero": true,
+            "significance": "statistically superior (95% CI excludes 0)"
+          }
         }
       },
       "shap": {
@@ -2830,7 +2872,28 @@
           "f1": 0.6292134831460674,
           "roc_auc": 0.7429210814760687,
           "pr_auc": 0.6078406732771737,
-          "brier_score": 0.2053872622905356
+          "brier_score": 0.2053872622905356,
+          "paired_bootstrap": {
+            "baseline_model": "clinical_subset_lr",
+            "clinical_features": [
+              "Age",
+              "Sex",
+              "HTN",
+              "DM",
+              "Current Smoker",
+              "Typical Chest Pain"
+            ],
+            "deployed_roc_auc": 0.7235,
+            "baseline_roc_auc": 0.7429,
+            "delta_auc": -0.0195,
+            "ci_95": [
+              -0.0607,
+              0.0251
+            ],
+            "fraction_deployed_superior": 0.193,
+            "excludes_zero": false,
+            "significance": "not significantly different (95% CI includes 0)"
+          }
         }
       },
       "shap": {
@@ -3819,7 +3882,28 @@
           "f1": 0.6030534351145038,
           "roc_auc": 0.7411584516847676,
           "pr_auc": 0.6067917835094707,
-          "brier_score": 0.20384022980613123
+          "brier_score": 0.20384022980613123,
+          "paired_bootstrap": {
+            "baseline_model": "clinical_subset_lr",
+            "clinical_features": [
+              "Age",
+              "Sex",
+              "HTN",
+              "DM",
+              "Current Smoker",
+              "Typical Chest Pain"
+            ],
+            "deployed_roc_auc": 0.7397,
+            "baseline_roc_auc": 0.7412,
+            "delta_auc": -0.0015,
+            "ci_95": [
+              -0.0466,
+              0.0448
+            ],
+            "fraction_deployed_superior": 0.477,
+            "excludes_zero": false,
+            "significance": "not significantly different (95% CI includes 0)"
+          }
         }
       },
       "shap": {
@@ -4158,7 +4242,28 @@
       "roc_auc_ci_95": [
         0.8915,
         0.9545
-      ]
+      ],
+      "paired_bootstrap_vs_clinical_lr": {
+        "baseline_model": "clinical_subset_lr",
+        "clinical_features": [
+          "Age",
+          "Sex",
+          "HTN",
+          "DM",
+          "Current Smoker",
+          "Typical Chest Pain"
+        ],
+        "deployed_roc_auc": 0.9256,
+        "baseline_roc_auc": 0.9032,
+        "delta_auc": 0.0225,
+        "ci_95": [
+          -0.0018,
+          0.0472
+        ],
+        "fraction_deployed_superior": 0.962,
+        "excludes_zero": false,
+        "significance": "not significantly different (95% CI includes 0)"
+      }
     },
     "y_lad": {
       "selected_model": "RandomForest",
@@ -4182,7 +4287,28 @@
       "roc_auc_ci_95": [
         0.7967,
         0.8882
-      ]
+      ],
+      "paired_bootstrap_vs_clinical_lr": {
+        "baseline_model": "clinical_subset_lr",
+        "clinical_features": [
+          "Age",
+          "Sex",
+          "HTN",
+          "DM",
+          "Current Smoker",
+          "Typical Chest Pain"
+        ],
+        "deployed_roc_auc": 0.8453,
+        "baseline_roc_auc": 0.7901,
+        "delta_auc": 0.0552,
+        "ci_95": [
+          0.0169,
+          0.0967
+        ],
+        "fraction_deployed_superior": 0.997,
+        "excludes_zero": true,
+        "significance": "statistically superior (95% CI excludes 0)"
+      }
     },
     "y_lcx": {
       "selected_model": "LightGBM",
@@ -4206,7 +4332,28 @@
       "roc_auc_ci_95": [
         0.665,
         0.7761
-      ]
+      ],
+      "paired_bootstrap_vs_clinical_lr": {
+        "baseline_model": "clinical_subset_lr",
+        "clinical_features": [
+          "Age",
+          "Sex",
+          "HTN",
+          "DM",
+          "Current Smoker",
+          "Typical Chest Pain"
+        ],
+        "deployed_roc_auc": 0.7235,
+        "baseline_roc_auc": 0.7429,
+        "delta_auc": -0.0195,
+        "ci_95": [
+          -0.0607,
+          0.0251
+        ],
+        "fraction_deployed_superior": 0.193,
+        "excludes_zero": false,
+        "significance": "not significantly different (95% CI includes 0)"
+      }
     },
     "y_rca": {
       "selected_model": "LGBM_Shallow",
@@ -4230,7 +4377,28 @@
       "roc_auc_ci_95": [
         0.6826,
         0.7921
-      ]
+      ],
+      "paired_bootstrap_vs_clinical_lr": {
+        "baseline_model": "clinical_subset_lr",
+        "clinical_features": [
+          "Age",
+          "Sex",
+          "HTN",
+          "DM",
+          "Current Smoker",
+          "Typical Chest Pain"
+        ],
+        "deployed_roc_auc": 0.7397,
+        "baseline_roc_auc": 0.7412,
+        "delta_auc": -0.0015,
+        "ci_95": [
+          -0.0466,
+          0.0448
+        ],
+        "fraction_deployed_superior": 0.477,
+        "excludes_zero": false,
+        "significance": "not significantly different (95% CI includes 0)"
+      }
     }
   }
 }

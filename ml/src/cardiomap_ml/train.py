@@ -54,6 +54,9 @@ from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from xgboost import XGBClassifier
 
 from cardiomap_ml.config import (
+    BOOTSTRAP_STABILITY_EXPLAINER_TYPES,
+    BOOTSTRAP_STABILITY_REFITS,
+    BOOTSTRAP_STABILITY_TOP_K,
     PROBABILITY_CLIP_MAX,
     PROBABILITY_CLIP_MIN,
     RANDOM_SEED,
@@ -1152,7 +1155,28 @@ def run_pipeline(
         json.dump(shap_global, f, indent=2)
     logger.info("Saved shap_global.json to %s", shap_path)
 
-    # 5. Automatically compute and append baseline comparison table
+    # 5. Automatically update shap_stability provenance from run constants
+    shap_stability_path = artifacts_path / "shap_stability.json"
+    if shap_stability_path.exists():
+        try:
+            with open(shap_stability_path, encoding="utf-8") as f:
+                stab_data = json.load(f)
+            stab_data["provenance"] = {
+                "bootstrap_refits": BOOTSTRAP_STABILITY_REFITS,
+                "top_k": BOOTSTRAP_STABILITY_TOP_K,
+                "explainer_types": BOOTSTRAP_STABILITY_EXPLAINER_TYPES,
+            }
+            with open(shap_stability_path, "w", encoding="utf-8") as f:
+                json.dump(stab_data, f, indent=2)
+            logger.info(
+                "Updated shap_stability.json provenance using run constants (%d refits, top-%d)",
+                BOOTSTRAP_STABILITY_REFITS,
+                BOOTSTRAP_STABILITY_TOP_K,
+            )
+        except (OSError, json.JSONDecodeError) as e:
+            logger.warning("Could not update shap_stability provenance: %s", e)
+
+    # 6. Automatically compute and append baseline comparison table
     try:
         from cardiomap_ml.metrics_table import compute_baseline_table, update_metrics_json
 

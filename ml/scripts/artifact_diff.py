@@ -21,6 +21,7 @@ IGNORED_KEYS = {
     "commit",
     "generated_at",
     "total_runtime_seconds",
+    "training_time_seconds",
     "provenance",
 }
 

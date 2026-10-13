@@ -25,6 +25,7 @@ Verifies:
 8. Parity Test: for 10 real dataset rows, API /predict probabilities equal offline model prediction (tol 1e-9)
 """
 
+import copy
 from collections.abc import Iterator
 from typing import Any
 
@@ -499,3 +500,45 @@ def test_explain_all_15_subsets_determinism(client: TestClient) -> None:
                     assert diff <= 1e-12, (
                         f"Diff {diff} > 1e-12 for target {t}, feature {fc['feature']}"
                     )
+
+
+def test_stability_note_provenance_monkeypatch_and_failure(client: TestClient) -> None:
+    """Verify stability_note dynamic building: B=7 monkeypatch, proxy wording, and loud KeyError failure on missing keys."""
+    from api.app.main import STATE, build_stability_note
+
+    sample_input = {"Age": 60, "Sex": "Male"}
+    orig_stability = copy.deepcopy(STATE["shap_stability"])
+
+    try:
+        # 1. Monkeypatch bootstrap_refits=7
+        STATE["shap_stability"]["provenance"]["bootstrap_refits"] = 7
+        note = build_stability_note(STATE["shap_stability"])
+        assert "B=7" in note
+        assert "They are a proxy and come from a different explainer than the displayed attributions." in note
+
+        # Verify through /explain endpoint
+        res = client.post("/explain?targets=cad", json=sample_input)
+        assert res.status_code == 200
+        assert "B=7" in res.json()["explainer"]["stability_note"]
+        assert "They are a proxy and come from a different explainer than the displayed attributions." in res.json()["explainer"]["stability_note"]
+
+        # 2. Test missing provenance keys fail loudly and set artifacts_ready to False
+        for missing_key in ("bootstrap_refits", "top_k", "explainer_types"):
+            bad_data = copy.deepcopy(orig_stability)
+            del bad_data["provenance"][missing_key]
+            with pytest.raises(KeyError, match=missing_key):
+                build_stability_note(bad_data)
+            assert STATE["artifacts_ready"] is False
+
+        # 3. Test missing provenance object entirely
+        bad_data_no_prov = copy.deepcopy(orig_stability)
+        del bad_data_no_prov["provenance"]
+        with pytest.raises(KeyError):
+            build_stability_note(bad_data_no_prov)
+        assert STATE["artifacts_ready"] is False
+
+    finally:
+        # Restore original valid state
+        STATE["shap_stability"] = orig_stability
+        STATE["artifacts_ready"] = True
+

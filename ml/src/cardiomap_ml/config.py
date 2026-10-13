@@ -39,6 +39,11 @@ FORBIDDEN_TARGET_NAMES: tuple[str, ...] = ("LAD", "LCX", "RCA", "Cath", "CAD")
 PROBABILITY_CLIP_MIN: float = 0.01
 PROBABILITY_CLIP_MAX: float = 0.99
 
+# Bootstrap SHAP feature stability run configuration constants
+BOOTSTRAP_STABILITY_REFITS: int = 20
+BOOTSTRAP_STABILITY_TOP_K: int = 10
+BOOTSTRAP_STABILITY_EXPLAINER_TYPES: str = "native tree and linear explainers"
+
 
 def normalize_column_name(name: str) -> str:
     """Normalize a column name by stripping parenthetical notes, whitespace, lowercasing, and removing separators."""

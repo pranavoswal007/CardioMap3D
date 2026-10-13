@@ -60,15 +60,33 @@ def compute_artifact_hash(artifacts_dir: Path) -> str:
 
 def build_stability_note(stability_data: dict[str, Any] | None) -> str:
     """Dynamically construct stability note from shap_stability.json provenance without hardcoded numbers."""
-    prov = stability_data.get("provenance", {}) if stability_data else {}
-    refits = prov.get("bootstrap_refits", 20)
-    top_k = prov.get("top_k", 10)
-    explainer_types = prov.get("explainer_types", "native tree and linear explainers")
+    if not stability_data:
+        STATE["artifacts_ready"] = False
+        STATE["artifacts_error_reason"] = "Missing shap_stability artifact data"
+        raise KeyError("Missing shap_stability data; cannot construct stability_note")
+
+    prov = stability_data.get("provenance")
+    if not isinstance(prov, dict):
+        STATE["artifacts_ready"] = False
+        STATE["artifacts_error_reason"] = "Missing 'provenance' object in shap_stability data"
+        raise KeyError("Missing 'provenance' object in shap_stability data; cannot construct stability_note")
+
+    for key in ("bootstrap_refits", "top_k", "explainer_types"):
+        if key not in prov:
+            STATE["artifacts_ready"] = False
+            STATE["artifacts_error_reason"] = f"Missing required provenance key '{key}' in shap_stability"
+            raise KeyError(f"Missing required provenance key '{key}' in shap_stability; cannot construct stability_note")
+
+    refits = prov["bootstrap_refits"]
+    top_k = prov["top_k"]
+    explainer_types = prov["explainer_types"]
+
     return (
         f"Global feature stability evaluated across B={refits} bootstrap refits "
         f"tracking top-{top_k} feature persistence using {explainer_types}. "
         f"Local patient explanations are computed on the deployed calibrated pipeline "
-        f"using stratified KernelExplainer in probability points."
+        f"using stratified KernelExplainer in probability points. "
+        f"They are a proxy and come from a different explainer than the displayed attributions."
     )
 
 
@@ -181,6 +199,9 @@ def load_all_artifacts() -> None:
         if stability_path.exists():
             with open(stability_path, encoding="utf-8") as f:
                 STATE["shap_stability"] = json.load(f)
+            build_stability_note(STATE["shap_stability"])
+        else:
+            raise FileNotFoundError(f"shap_stability.json missing in {artifacts_dir}")
 
         # 5. SHAP background sample
         bg_path = artifacts_dir / "shap_background_sample.csv"

@@ -70,6 +70,14 @@ In clinical datasets with non-uniform class distribution, evaluating models agai
 | **`y_lcx`** | **39.27% (119 / 303)** | 0.5640 | 0.4674 | **0.3973** | **0.6491** | **+0.0851** | 0.6983 | **0.7235** [0.6650, 0.7761] |
 | **`y_rca`** | **37.62% (114 / 303)** | 0.5468 | 0.4773 | **0.3354** | **0.6341** | **+0.0874** | 0.6822 | **0.7397** [0.6826, 0.7921] |
 
+#### Paired Bootstrap Comparison vs. 6-Feature Clinical LR Baseline ($B=1000$, seed=42)
+| Target | Deployed Model | Deployed Calibrated ROC-AUC | Clinical Baseline ROC-AUC (6 features) | Paired $\Delta$ AUC [95% CI] | Fraction Deployed > Baseline | Significance Assessment |
+| :--- | :--- | :---: | :---: | :---: | :---: | :--- |
+| **`y_cad`** | SoftVotingEnsemble | **0.9256** | 0.9032 | **+0.0225** [-0.0018, 0.0472] | **96.2%** | not significantly different (95% CI includes 0) |
+| **`y_lad`** | RandomForest | **0.8453** | 0.7901 | **+0.0552** [0.0169, 0.0967] | **99.7%** | **Statistically superior** (95% CI excludes 0) |
+| **`y_lcx`** | LightGBM | **0.7235** | 0.7429 | **-0.0195** [-0.0607, 0.0251] | **19.3%** | not significantly different (95% CI includes 0) |
+| **`y_rca`** | LGBM_Shallow | **0.7397** | 0.7412 | **-0.0015** [-0.0466, 0.0448] | **47.7%** | not significantly different (95% CI includes 0) |
+
 ### B. Clinical Context: LCX and RCA Operating Thresholds Near/Below Prevalence
 A critical clinical finding is that the optimal operating threshold for `y_lcx` ($t = 0.3973$) is almost identical to cohort prevalence ($39.27\%$), and the operating threshold for `y_rca` ($t = 0.3354$) is strictly below cohort prevalence ($37.62\%$).
 * **Why default 0.50 fails on LCX and RCA**: Because both LCX and RCA exhibit negative-class majority (prevalences ~38–39%), standard $0.50$ decision boundaries incur severe false negative rates, resulting in poor default $F_1$ scores (0.4674 and 0.4773), which are lower than the trivial "flag everyone" baseline.
@@ -95,11 +103,11 @@ All calibrated probability outputs are clipped to $[0.01, 0.99]$ at inference (`
 If any individual vessel stenosis probability exceeds the overall CAD probability ($p_{\text{CAD}} < \max(p_{\text{LAD}}, p_{\text{LCX}}, p_{\text{RCA}})$), the API flags this anatomical incoherence and returns both the raw CAD probability and a coherent adjusted probability equal to $\max(p_{\text{CAD}}, p_{\text{vessels}})$.
 
 ### D. Test Suite Verification & Performance Budgets
-* **Test Suite Status**: 67 tests passing (0 skipped, 0 flaky, 0 failing).
+* **Test Suite Status**: 76 tests passing (0 skipped, 0 flaky, 0 failing).
 * **Determinism**: 100% deterministic prediction and SHAP attribution on repeated evaluations.
-* **High-Fidelity Reference Agreement**: 20-patient reference benchmark ($nsamples=3000$, 100 background points) vs production explainer yields **Mean Top-3 Overlap = 2.40 / 3 (80.0%)** and **Mean Spearman rank correlation = 0.6627**.
-* **Age Perturbation Stability**: Perturbing Age by +1 year across 20 patients preserves top-3 features for 19 of 20 patients (**95.0%**, exceeding the 90% stability target).
+* **High-Fidelity Reference Agreement**: 20-patient reference benchmark ($nsamples=3000$, 100 background points) vs production explainer yields **Mean Top-3 Overlap = 2.50 / 3 (83.33%)** and **Mean Spearman rank correlation = 0.6974**.
+* **Age Perturbation Stability**: Perturbing Age by +1 year across 20 patients preserves top-3 features for 20 of 20 patients (**100.0%**, exceeding the 90% stability target).
 * **Top-5 TreeExplainer Agreement**: Across 20 patients, the new deployed calibrated explainer agrees with old TreeExplainer top-5 rankings by **62.0% on LAD, 58.0% on LCX, and 73.0% on RCA** (overall average 64.3%), reflecting the clinical progression from single uncalibrated tree margin fold models to the full 5-fold calibrated probability pipeline.
 * **Latency Budget**: Cold-cache 50 distinct patients benchmark:
   - `/predict`: p50 = 63.51 ms, p95 = 90.17 ms (Budget < 100 ms: **PASSED**).
-  - `/explain`: p50 = 0.998 s, p95 = 1.127 s (Budget < 1.5 s: **PASSED**).
+  - `/explain`: p50 = 0.689 s, p95 = 0.723 s (Budget < 1.5 s: **PASSED**).
