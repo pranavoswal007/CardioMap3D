@@ -2,8 +2,9 @@ import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { VesselConfig, VesselData } from '../types/viewer';
+import { coronaryConfig } from '../anatomy';
 import { evaluateVesselColor } from '../utils/vesselColors';
-import { createTaperedTubeGeometry } from '../utils/taperedTube';
+import { createTaperedTubeGeometry, getEffectiveTubeRadius } from '../utils/taperedTube';
 
 export interface CoronaryArteryMeshProps {
   config: VesselConfig;
@@ -35,19 +36,22 @@ export function CoronaryArteryMesh({
     return new THREE.CatmullRomCurve3(vectors, false, 'catmullrom', 0.5);
   }, [activePoints]);
 
+  const isTraced = Boolean(coronaryConfig.traced);
+  const effectiveRadius = getEffectiveTubeRadius(config.radius, isTraced);
+
   // Main anatomical tube geometry with proximal-to-distal taper
   const tubeGeometry = useMemo(() => {
-    const startRadius = config.radius * 1.15;
-    const endRadius = config.radius * 0.65;
+    const startRadius = effectiveRadius * 1.15;
+    const endRadius = effectiveRadius * 0.65;
     return createTaperedTubeGeometry(curve, 64, startRadius, endRadius, 14);
-  }, [curve, config.radius]);
+  }, [curve, effectiveRadius]);
 
   // Selection & hover halo geometry
   const glowGeometry = useMemo(() => {
-    const startRadius = config.radius * 1.55;
-    const endRadius = config.radius * 0.95;
+    const startRadius = effectiveRadius * 1.55;
+    const endRadius = effectiveRadius * 0.95;
     return createTaperedTubeGeometry(curve, 48, startRadius, endRadius, 12);
-  }, [curve, config.radius]);
+  }, [curve, effectiveRadius]);
 
   // Target color evaluation from clinical risk thresholds
   const evaluation = useMemo(() => evaluateVesselColor(data), [data]);

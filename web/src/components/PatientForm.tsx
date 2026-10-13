@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Play, RotateCcw, User, AlertCircle, Info, ChevronDown, ChevronUp } from 'lucide-react';
+import { Play, RotateCcw, User, AlertCircle, Info, ChevronDown, ChevronUp, Sliders } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { runPredictionFlow } from '../services/predictionFlow';
 import type { FeatureSchemaItem } from '../api/types';
@@ -14,6 +14,8 @@ const GROUP_LABELS: Record<string, string> = {
   echo: 'Echocardiography (Echo)',
 };
 
+import { formatNumericDefault } from '../utils/formatters';
+
 export function PatientForm() {
   const schemaData = useAppStore((s) => s.schemaData);
   const samplePatients = useAppStore((s) => s.samplePatients);
@@ -24,6 +26,8 @@ export function PatientForm() {
   const predictLoading = useAppStore((s) => s.predictLoading);
   const predictError = useAppStore((s) => s.predictError);
   const prediction = useAppStore((s) => s.prediction);
+
+  const [isEditing, setIsEditing] = useState(false);
 
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
     demographics: true,
@@ -71,10 +75,52 @@ export function PatientForm() {
     }
   };
 
+  const handleReset = () => {
+    resetPatientInputs();
+    setIsEditing(false);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     void runPredictionFlow();
+    setIsEditing(false);
   };
+
+  if (prediction && !isEditing) {
+    const inputCount = Object.keys(patientInputs).length;
+    return (
+      <div
+        data-testid="patient-form-collapsed"
+        className="bg-slate-900 border border-slate-800 rounded-xl p-3.5 shadow-xl text-slate-100 flex flex-wrap items-center justify-between gap-3"
+      >
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-indigo-950 border border-indigo-800 flex items-center justify-center shrink-0">
+            <User className="w-4 h-4 text-indigo-400" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-white">Patient Profile Loaded</span>
+              <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-950 text-emerald-300 border border-emerald-800">
+                Prediction Active
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-400">
+              {inputCount > 0 ? `${inputCount} clinical features specified` : 'Default patient profile'} &bull; Form collapsed to prioritize results
+            </p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setIsEditing(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-medium transition shadow-md"
+        >
+          <Sliders className="w-3.5 h-3.5" />
+          <span>Edit inputs</span>
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-xl text-slate-100">
@@ -90,6 +136,16 @@ export function PatientForm() {
         </div>
 
         <div className="flex items-center gap-2">
+          {prediction && (
+            <button
+              type="button"
+              onClick={() => setIsEditing(false)}
+              className="text-xs text-slate-400 hover:text-white px-2.5 py-1.5 bg-slate-800 rounded border border-slate-700 transition"
+            >
+              Hide form
+            </button>
+          )}
+
           {samplePatients.length > 0 && (
             <select
               aria-label="Load sample patient"
@@ -110,7 +166,7 @@ export function PatientForm() {
 
           <button
             type="button"
-            onClick={resetPatientInputs}
+            onClick={handleReset}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded border border-slate-700 transition"
           >
             <RotateCcw className="w-3.5 h-3.5" />
@@ -224,7 +280,7 @@ export function PatientForm() {
                             min={feat.min ?? undefined}
                             max={feat.max ?? undefined}
                             step="any"
-                            placeholder={feat.default !== undefined && feat.default !== null ? `Default: ${feat.default}` : ''}
+                            placeholder={feat.default !== undefined && feat.default !== null ? `Default: ${formatNumericDefault(feat.default)}` : ''}
                             onChange={(e) => setPatientInput(feat.name, e.target.value)}
                             className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
                           />

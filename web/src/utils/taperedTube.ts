@@ -1,5 +1,26 @@
 import * as THREE from 'three';
 
+export const DEFAULT_MODEL_SIZE = 2.4;
+export const MAX_CONFIGURED_TUBE_RADIUS = 0.04;
+export const UNTRACED_MAX_RADIUS_FRACTION = 0.006; // 0.6% of model size
+
+/**
+ * Computes effective vessel tube radius.
+ * When traced is false, clamps radius to at most 0.6% of model size.
+ * When traced is true, clamps radius to configured maximum (0.04).
+ */
+export function getEffectiveTubeRadius(
+  configRadius: number,
+  isTraced: boolean,
+  modelSize: number = DEFAULT_MODEL_SIZE
+): number {
+  const maxUntraced = modelSize * UNTRACED_MAX_RADIUS_FRACTION;
+  if (!isTraced) {
+    return Math.min(configRadius, maxUntraced);
+  }
+  return Math.min(configRadius, MAX_CONFIGURED_TUBE_RADIUS);
+}
+
 /**
  * Builds a smooth tapered tube geometry along a 3D CatmullRom spline curve.
  * Tapers smoothly from ostium (proximal origin) to distal termination.

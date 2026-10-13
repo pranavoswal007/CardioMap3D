@@ -38,6 +38,7 @@ export interface VesselConfig {
 export interface CoronaryDataConfig {
   version: string;
   comment: string;
+  traced: boolean;
   vessels: VesselConfig[];
 }
 

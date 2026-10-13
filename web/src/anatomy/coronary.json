@@ -1,5 +1,6 @@
 {
   "version": "1.0.0",
+  "traced": false,
   "comment": "Config-driven anatomical coronary artery spline geometries for 3D visualization. Territory descriptions follow standard clinical cardiac anatomy without reference to clinical dataset indices.",
   "vessels": [
     {

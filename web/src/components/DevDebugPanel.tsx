@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { VesselId, VesselData, HeartTransformConfig } from '../types/viewer';
-import { Sliders, ChevronDown, ChevronUp, Copy, Check, RotateCcw, Crosshair, Undo } from 'lucide-react';
+import { Sliders, ChevronDown, ChevronUp, Copy, Check, RotateCcw, Crosshair, Undo, AlertTriangle } from 'lucide-react';
 import { coronaryConfig } from '../anatomy';
 
 export interface DevDebugPanelProps {
@@ -105,6 +105,16 @@ export function DevDebugPanel({
 
       {isOpen && (
         <div className="p-3 space-y-4 max-h-[82vh] overflow-y-auto">
+          {!coronaryConfig.traced && (
+            <div
+              data-testid="debug-untraced-warning"
+              className="p-2.5 bg-amber-950/80 border border-amber-600 rounded-lg text-amber-200 text-[11px] flex items-center gap-2"
+            >
+              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+              <span className="font-medium">coronary.json is not traced to this mesh: use Trace mode</span>
+            </div>
+          )}
+
           {/* Section: Surface Tracing Tool */}
           <div className="bg-slate-900/80 p-2.5 rounded-lg border border-sky-500/30 space-y-2.5">
             <div className="flex items-center justify-between">

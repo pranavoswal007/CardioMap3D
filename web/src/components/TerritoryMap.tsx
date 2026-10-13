@@ -1,4 +1,5 @@
 import { useState, useId } from 'react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import territoriesData from '../anatomy/territories.json';
 import { useAppStore } from '../store/useAppStore';
 import { evaluateVesselColor } from '../utils/vesselColors';
@@ -64,53 +65,84 @@ function makeSectorPath(
 
 interface TerritoryMapProps {
   vessels?: Record<VesselId, VesselData>;
+  hasPrediction?: boolean;
 }
 
-export function TerritoryMap({ vessels }: TerritoryMapProps) {
+export function TerritoryMap({ vessels, hasPrediction }: TerritoryMapProps) {
   const selectedVessel = useAppStore((s) => s.selectedVessel);
   const setSelectedVessel = useAppStore((s) => s.setSelectedVessel);
+  const storePrediction = useAppStore((s) => s.prediction);
   const [hoveredSegment, setHoveredSegment] = useState<TerritorySegment | null>(null);
+
+  const effectivePrediction = hasPrediction !== undefined ? hasPrediction : Boolean(storePrediction);
+  const isPredictionActive = Boolean(effectivePrediction);
+  const [isExpanded, setIsExpanded] = useState<boolean>(isPredictionActive);
   const captionId = useId();
 
-  const cx = 150;
-  const cy = 150;
+  // Automatically expand when a prediction is made
+  const [prevPredictionActive, setPrevPredictionActive] = useState(isPredictionActive);
+  if (isPredictionActive !== prevPredictionActive) {
+    setPrevPredictionActive(isPredictionActive);
+    if (isPredictionActive) {
+      setIsExpanded(true);
+    }
+  }
+
+  const cx = 160;
+  const cy = 160;
 
   return (
     <div
       data-testid="territory-map-container"
-      className="bg-slate-950/70 border border-slate-800 rounded-xl p-3 flex flex-col items-center justify-between shadow-lg"
+      className="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-xl max-w-[320px] w-full mx-auto"
     >
-      <div className="w-full flex items-center justify-between mb-1 pb-1.5 border-b border-slate-800/80">
-        <span className="text-[11px] font-semibold text-slate-200">
-          AHA 17-Segment Polar Bull&apos;s-Eye
-        </span>
-        <span className="text-[10px] text-slate-400 font-mono">
-          {selectedVessel ? `Selected: ${selectedVessel.toUpperCase()}` : 'Click vessel to focus'}
-        </span>
-      </div>
+      {/* Collapsible Card Header */}
+      <button
+        type="button"
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="w-full flex items-center justify-between text-left focus:outline-none"
+        aria-expanded={isExpanded}
+        aria-controls="territory-map-body"
+      >
+        <div className="flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full bg-indigo-400" />
+          <span className="text-xs font-semibold text-slate-100">
+            Coronary territory map (AHA 17-segment)
+          </span>
+        </div>
+        <div className="flex items-center gap-1 text-slate-400">
+          <span className="text-[10px] font-mono">
+            {isExpanded ? (selectedVessel ? selectedVessel.toUpperCase() : 'Collapse') : 'Expand'}
+          </span>
+          {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+        </div>
+      </button>
 
-      {/* Bull's-eye SVG */}
-      <div className="relative flex items-center justify-center p-1">
-        <svg
-          viewBox="0 0 300 300"
-          className="w-56 h-56 sm:w-60 sm:h-60"
-          role="region"
-          aria-label="AHA 17-Segment Coronary Territory Bull's-Eye Map"
-          aria-describedby={captionId}
-        >
-          {/* Anatomical Reference Guides */}
-          <text x={cx} y="11" textAnchor="middle" className="fill-slate-500 text-[9px] font-semibold tracking-wider">
-            ANTERIOR
-          </text>
-          <text x="11" y={cy + 3} textAnchor="start" className="fill-slate-500 text-[9px] font-semibold tracking-wider">
-            SEPTAL
-          </text>
-          <text x="289" y={cy + 3} textAnchor="end" className="fill-slate-500 text-[9px] font-semibold tracking-wider">
-            LATERAL
-          </text>
-          <text x={cx} y="294" textAnchor="middle" className="fill-slate-500 text-[9px] font-semibold tracking-wider">
-            INFERIOR
-          </text>
+      {/* Collapsible Body */}
+      {isExpanded && (
+        <div id="territory-map-body" className="pt-2 border-t border-slate-800/80 mt-2 space-y-2">
+          {/* Bull's-eye SVG with Padded ViewBox */}
+          <div className="relative flex items-center justify-center p-0.5">
+            <svg
+              viewBox="0 0 320 320"
+              className="w-56 h-56 sm:w-60 sm:h-60"
+              role="region"
+              aria-label="AHA 17-Segment Coronary Territory Bull's-Eye Map"
+              aria-describedby={captionId}
+            >
+              {/* Anatomical Reference Guides - Padded coordinates avoid clipping */}
+              <text x={cx} y="13" textAnchor="middle" className="fill-slate-400 text-[9px] font-bold tracking-wider">
+                ANTERIOR
+              </text>
+              <text x="8" y={cy + 3} textAnchor="start" className="fill-slate-400 text-[9px] font-bold tracking-wider">
+                SEPTAL
+              </text>
+              <text x="312" y={cy + 3} textAnchor="end" className="fill-slate-400 text-[9px] font-bold tracking-wider">
+                LATERAL
+              </text>
+              <text x={cx} y="312" textAnchor="middle" className="fill-slate-400 text-[9px] font-bold tracking-wider">
+                INFERIOR
+              </text>
 
           {/* 17 Segments */}
           {territories.map((seg) => {
@@ -242,7 +274,7 @@ export function TerritoryMap({ vessels }: TerritoryMapProps) {
         )}
       </div>
 
-      {/* Mandatory Territory Caption (Always visible per contract) */}
+      {/* Mandatory Territory Caption (Always visible per contract when expanded) */}
       <p
         id={captionId}
         data-testid="territory-map-caption"
@@ -250,6 +282,8 @@ export function TerritoryMap({ vessels }: TerritoryMapProps) {
       >
         {TERRITORY_CAPTION}
       </p>
+        </div>
+      )}
     </div>
   );
 }

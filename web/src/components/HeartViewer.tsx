@@ -1,22 +1,51 @@
 import { useRef, useState, useEffect, useMemo, useCallback } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { OrbitControls, ContactShadows } from '@react-three/drei';
+import { OrbitControls, ContactShadows, Bounds, useBounds } from '@react-three/drei';
 import * as THREE from 'three';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
-import { RotateCcw, Info, Layers } from 'lucide-react';
+import { RotateCcw, Info, Layers, HeartPulse } from 'lucide-react';
 
 import type { VesselId, VesselData, HeartViewerProps, VesselConfig, HeartTransformConfig } from '../types/viewer';
-import { vesselsList, defaultHeartTransform } from '../anatomy';
+import { vesselsList, defaultHeartTransform, coronaryConfig } from '../anatomy';
 import { evaluateVesselColor } from '../utils/vesselColors';
 import { HeartBody } from './HeartBody';
 import { CoronaryArteryMesh } from './CoronaryArteryMesh';
 import { createTaperedTubeGeometry } from '../utils/taperedTube';
-import { VesselLegend } from './VesselLegend';
-import { VesselList } from './VesselList';
 import { DevDebugPanel } from './DevDebugPanel';
+import heartAttributionText from '../../public/models/ATTRIBUTION.txt?raw';
 
 const INITIAL_CAMERA_POS: [number, number, number] = [0, 0.4, 3.8];
 const INITIAL_TARGET_POS: [number, number, number] = [0, 0, 0];
+
+/**
+ * Bounds auto-fit controller that centers and fits the model within the viewport
+ * with 10% margin on initial mount and on view reset.
+ */
+function AutoFitController({ resetCount }: { resetCount: number }) {
+  const bounds = useBounds();
+  const prevReset = useRef(resetCount);
+
+  useEffect(() => {
+    try {
+      bounds.refresh().fit();
+    } catch {
+      // headless / mock environments
+    }
+  }, [bounds]);
+
+  useEffect(() => {
+    if (resetCount !== prevReset.current) {
+      prevReset.current = resetCount;
+      try {
+        bounds.refresh().fit();
+      } catch {
+        // headless / mock environments
+      }
+    }
+  }, [resetCount, bounds]);
+
+  return null;
+}
 
 /**
  * Camera controller handling smooth transition animations on vessel selection and view reset.
@@ -92,6 +121,7 @@ function PulsingHeartGroup({
     if (!groupRef.current) return;
     const prefersReducedMotion =
       typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
       window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     if (!bpm || bpm <= 0 || prefersReducedMotion) {
@@ -125,7 +155,6 @@ function TracePreview({
 
   return (
     <group>
-      {/* Markers at clicked points */}
       {points.map((pt, idx) => (
         <mesh key={idx} position={pt}>
           <sphereGeometry args={[0.022, 12, 12]} />
@@ -133,7 +162,6 @@ function TracePreview({
         </mesh>
       ))}
 
-      {/* Real-time spline connecting points */}
       {previewGeometry && (
         <mesh geometry={previewGeometry}>
           <meshStandardMaterial
@@ -160,7 +188,9 @@ export function HeartViewer({
 
   const [resetCount, setResetCount] = useState(0);
   const [hoveredVessel, setHoveredVessel] = useState<VesselId | null>(null);
-  const [xRay, setXRay] = useState(false);
+  const [xRay, setXRay] = useState(false); // Default OFF: opaque, vertex-colored heart
+  const [showCredits, setShowCredits] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
 
   // ?debug detection
   const [isDebugMode] = useState<boolean>(() => {
@@ -207,6 +237,44 @@ export function HeartViewer({
       [id]: data,
     }));
   };
+
+  // Automatic mesh surface projection at load when coronary.json is not yet traced
+  const hasProjectedRef = useRef(false);
+  const projectPointsOntoMesh = useCallback((mesh: THREE.Mesh) => {
+    if (coronaryConfig.traced || hasProjectedRef.current) return;
+    const raycaster = new THREE.Raycaster();
+    const snapped: Record<VesselId, [number, number, number][]> = { ...allVesselPoints };
+
+    (Object.keys(allVesselPoints) as VesselId[]).forEach((vid) => {
+      const pts = allVesselPoints[vid];
+      snapped[vid] = pts.map((p) => {
+        const v = new THREE.Vector3(p[0], p[1], p[2]);
+        const dir = new THREE.Vector3(0, 0, 0).sub(v).normalize();
+        const origin = v.clone().addScaledVector(dir, -0.6);
+        raycaster.set(origin, dir);
+        const hits = raycaster.intersectObject(mesh, false);
+        if (hits.length > 0) {
+          const hit = hits[0];
+          const hitNorm = hit.face?.normal || new THREE.Vector3(0, 0, 1);
+          const newPt = hit.point.clone().addScaledVector(hitNorm, 0.015);
+          return [
+            Number(newPt.x.toFixed(3)),
+            Number(newPt.y.toFixed(3)),
+            Number(newPt.z.toFixed(3)),
+          ];
+        }
+        return p;
+      });
+    });
+
+    setAllVesselPoints(snapped);
+    hasProjectedRef.current = true;
+  }, [allVesselPoints]);
+
+  const handleMeshReady = useCallback((mesh: THREE.Mesh) => {
+    heartMeshRef.current = mesh;
+    projectPointsOntoMesh(mesh);
+  }, [projectPointsOntoMesh]);
 
   // Trace Tool Handlers
   const handleStartTracing = (vessel: VesselId) => {
@@ -338,60 +406,82 @@ export function HeartViewer({
 
   const prefersReducedMotion =
     typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
     window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   return (
-    <div className={`flex flex-col gap-4 w-full ${className}`}>
-      {/* 3D Viewport Box */}
-      <div
-        className="relative w-full h-[520px] md:h-[580px] bg-gradient-to-b from-[#060a12] via-[#0b1220] to-[#060a12] rounded-2xl border border-slate-800 overflow-hidden shadow-2xl"
-        onDoubleClick={() => {
-          if (tracingVessel) handleFinishTracing();
-        }}
-      >
-        {/* Top-Left: Viewport Instructions and Title */}
-        <div className="absolute top-4 left-4 z-10 bg-slate-900/85 backdrop-blur-md px-3.5 py-2.5 rounded-xl border border-slate-700/60 shadow-lg pointer-events-auto">
-          <div className="text-xs font-semibold uppercase tracking-wider text-sky-400 mb-1 flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-sky-400 animate-pulse" />
+    <div
+      data-testid="hero-viewer-card"
+      className={`flex flex-col w-full h-[60vh] lg:h-[calc(100vh-7.5rem)] min-h-[560px] max-h-[900px] bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl relative ${className}`}
+    >
+      {/* 1. NON-OVERLAPPING Header Row: Title on Left, Controls on Right (Wraps on narrow screens) */}
+      <div className="flex flex-wrap items-center justify-between gap-2.5 px-4 py-2.5 border-b border-slate-800 bg-slate-900/95 shrink-0 z-10">
+        <div className="flex items-center gap-2">
+          <span className="w-2.5 h-2.5 rounded-full bg-sky-400 animate-pulse" />
+          <h2 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-sky-400 truncate">
             3D Coronary Anatomy Model
-          </div>
-          <p className="text-[11px] text-slate-300">
-            Rotate: <span className="text-slate-400">Left Click + Drag</span> &bull; Zoom: <span className="text-slate-400">Scroll</span> &bull; Pan: <span className="text-slate-400">Right Click</span>
-          </p>
+          </h2>
         </div>
 
-        {/* Top-Right: Toolbar Buttons (X-Ray + Reset) */}
-        <div className="absolute top-4 right-4 z-10 flex items-center gap-2 pointer-events-auto">
+        <div className="flex flex-wrap items-center gap-2">
+          {bpm !== undefined && (
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-rose-950/60 border border-rose-800/80 text-rose-300 text-xs font-medium">
+              <HeartPulse className="w-3.5 h-3.5 animate-pulse text-rose-400" />
+              <span>Heartbeat</span>
+              <span className="font-mono text-[10px] text-rose-300">({bpm} bpm)</span>
+            </div>
+          )}
+
           <button
+            type="button"
             onClick={() => setXRay(!xRay)}
             aria-label="Toggle X-ray semi-transparent view"
-            className={`flex items-center gap-1.5 px-3 py-1.5 backdrop-blur-md rounded-lg border text-xs font-medium transition shadow-lg ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition shadow-sm ${
               xRay
                 ? 'bg-sky-600/90 text-white border-sky-400'
-                : 'bg-slate-900/85 hover:bg-slate-800 text-slate-300 hover:text-white border-slate-700/60'
+                : 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border-slate-700'
             }`}
           >
             <Layers className="w-3.5 h-3.5 text-sky-400" />
             <span>{xRay ? 'X-Ray Active' : 'X-Ray View'}</span>
           </button>
+
           <button
+            type="button"
             onClick={handleResetView}
             aria-label="Reset 3D camera viewpoint"
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900/85 hover:bg-slate-800 backdrop-blur-md text-slate-300 hover:text-white rounded-lg border border-slate-700/60 text-xs font-medium transition shadow-lg"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg border border-slate-700 text-xs font-medium transition shadow-sm"
           >
             <RotateCcw className="w-3.5 h-3.5 text-sky-400" />
             <span>Reset View</span>
           </button>
-        </div>
 
-        {/* Floating Active Vessel Tooltip (Hover / Selection) */}
+          <button
+            type="button"
+            onClick={() => setShowHelp(!showHelp)}
+            aria-label="Viewer interaction hints and clinical anatomy notice"
+            className="w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center font-bold text-xs border border-slate-700 transition"
+          >
+            ?
+          </button>
+        </div>
+      </div>
+
+      {/* 2. Three.js Canvas: Fills remaining height, fits camera with 10% margin */}
+      <div
+        className="flex-1 relative w-full overflow-hidden bg-gradient-to-b from-[#060a12] via-[#0b1220] to-[#060a12]"
+        onDoubleClick={() => {
+          if (tracingVessel) handleFinishTracing();
+        }}
+      >
+        {/* Floating Active Vessel Tooltip */}
         {activeVesselConfig && (
           <div
-            className="absolute top-16 left-4 z-10 max-w-xs bg-slate-950/90 backdrop-blur-xl p-3 rounded-xl border shadow-2xl transition-all duration-200 pointer-events-none"
+            className="absolute top-3 left-3 z-20 max-w-xs bg-slate-950/90 backdrop-blur-xl p-3 rounded-xl border shadow-2xl transition-all duration-200 pointer-events-none"
             style={{ borderColor: activeEvaluation.hex }}
           >
             <div className="flex items-center justify-between gap-2 mb-1">
-              <span className="font-bold text-sm text-slate-100 flex items-center gap-1.5">
+              <span className="font-bold text-xs sm:text-sm text-slate-100 flex items-center gap-1.5">
                 <span
                   className="w-2.5 h-2.5 rounded-full shrink-0 shadow-sm"
                   style={{ backgroundColor: activeEvaluation.hex }}
@@ -411,7 +501,7 @@ export function HeartViewer({
               </span>
             </div>
 
-            <div className="text-[11px] font-medium text-slate-300 mb-1.5">
+            <div className="text-[11px] font-medium text-slate-300 mb-1">
               Status:{' '}
               <span style={{ color: activeEvaluation.hex }}>
                 {activeEvaluation.label}
@@ -421,32 +511,12 @@ export function HeartViewer({
               </span>
             </div>
 
-            <p className="text-[10px] text-slate-400 leading-relaxed border-t border-slate-800/80 pt-1.5">
+            <p className="text-[10px] text-slate-400 leading-relaxed border-t border-slate-800/80 pt-1">
               {activeVesselConfig.description}
             </p>
           </div>
         )}
 
-        {/* Bottom-Left: Mandatory Illustrative Notice & Model Attribution */}
-        <div className="absolute bottom-4 left-4 z-10 text-[11px] text-slate-300 bg-slate-950/90 px-3.5 py-2.5 rounded-xl border border-slate-800/80 backdrop-blur-md max-w-lg shadow-lg flex items-start gap-2.5 pointer-events-auto">
-          <Info className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-          <div className="space-y-1">
-            <div className="font-semibold text-amber-400">Illustrative anatomy, not patient imaging.</div>
-            <p className="text-[10px] text-slate-400 leading-relaxed">
-              Coronary geometries depict stylized canonical perfusion tracts. Vessel coloring reflects screening probability models. Click a vessel to highlight; click background to deselect.
-            </p>
-            <div className="text-[10px] text-slate-400 border-t border-slate-800/80 pt-1 flex flex-col gap-0.5">
-              <span className="font-medium text-slate-300">
-                Heart model by Hannah Newey, University of Dundee (CAHID), CC BY-NC-SA 4.0
-              </span>
-              <span className="text-[9px] text-slate-500 font-mono">
-                Adapted from &ldquo;Cardiac Anatomy: Coronary arteries of the heart&rdquo; (CC BY-NC-SA 4.0)
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Three.js Canvas */}
         <Canvas
           camera={{ position: INITIAL_CAMERA_POS, fov: 45 }}
           gl={{ antialias: true, alpha: true, powerPreference: 'default' }}
@@ -454,16 +524,11 @@ export function HeartViewer({
             if (!tracingVessel) onSelectVessel(null);
           }}
         >
-          {/* Lighting Rig: Key, Fill, Rim Light */}
-          <ambientLight intensity={0.65} />
-          {/* Key light: bright anterior/superior from top right */}
+          <ambientLight intensity={0.7} />
           <directionalLight position={[4, 6, 5]} intensity={1.5} />
-          {/* Fill light: softer cool fill from opposite side */}
           <directionalLight position={[-4, -2, 3]} intensity={0.5} color="#93c5fd" />
-          {/* Subtle Rim light: sharp backlight from behind */}
           <directionalLight position={[0, 4, -5]} intensity={0.8} color="#e0f2fe" />
 
-          {/* Soft Contact Shadow */}
           <ContactShadows
             position={[0, -1.25, 0]}
             opacity={0.45}
@@ -472,7 +537,6 @@ export function HeartViewer({
             far={3.0}
           />
 
-          {/* Camera Animation Rig */}
           <CameraRig
             selectedVessel={selectedVessel}
             resetCount={resetCount}
@@ -480,37 +544,37 @@ export function HeartViewer({
             allVesselPoints={allVesselPoints}
           />
 
-          {/* Cardiac Model & Vessel Geometry (wrapped in pulsing group when bpm is active) */}
-          <PulsingHeartGroup bpm={bpm}>
-            {/* 3D Heart Body with Meshopt Loading & Procedural Fallback */}
-            <HeartBody
-              xRay={xRay}
-              transform={heartTransform}
-              onMeshPointerDown={handleMeshPointerDown}
-              meshRef={heartMeshRef}
-            />
-
-            {/* Epicardial Coronary Vessels */}
-            {vesselsList.map((cfg) => (
-              <CoronaryArteryMesh
-                key={cfg.id}
-                config={cfg}
-                data={effectiveVessels[cfg.id]}
-                selected={selectedVessel === cfg.id}
-                hovered={hoveredVessel === cfg.id}
-                onSelect={() => onSelectVessel(selectedVessel === cfg.id ? null : cfg.id)}
-                onHover={(hov) => setHoveredVessel(hov ? cfg.id : null)}
-                overridePoints={allVesselPoints[cfg.id]}
+          {/* Bounds fits model bounding box with 10% margin on load/resize/reset */}
+          <Bounds fit clip observe margin={1.1}>
+            <AutoFitController resetCount={resetCount} />
+            <PulsingHeartGroup bpm={bpm}>
+              <HeartBody
+                xRay={xRay}
+                transform={heartTransform}
+                onMeshPointerDown={handleMeshPointerDown}
+                meshRef={heartMeshRef}
+                onMeshReady={handleMeshReady}
               />
-            ))}
 
-            {/* Live Trace Markers & Spline Preview during debug trace mode */}
-            {tracingVessel && activeTracePoints.length > 0 && (
-              <TracePreview points={activeTracePoints} />
-            )}
-          </PulsingHeartGroup>
+              {vesselsList.map((cfg) => (
+                <CoronaryArteryMesh
+                  key={cfg.id}
+                  config={cfg}
+                  data={effectiveVessels[cfg.id]}
+                  selected={selectedVessel === cfg.id}
+                  hovered={hoveredVessel === cfg.id}
+                  onSelect={() => onSelectVessel(selectedVessel === cfg.id ? null : cfg.id)}
+                  onHover={(hov) => setHoveredVessel(hov ? cfg.id : null)}
+                  overridePoints={allVesselPoints[cfg.id]}
+                />
+              ))}
 
-          {/* Orbit Controls with Damping, Zoom Limits, and Auto-Rotation */}
+              {tracingVessel && activeTracePoints.length > 0 && (
+                <TracePreview points={activeTracePoints} />
+              )}
+            </PulsingHeartGroup>
+          </Bounds>
+
           <OrbitControls
             ref={controlsRef}
             makeDefault
@@ -519,7 +583,7 @@ export function HeartViewer({
             enableRotate
             enableDamping
             dampingFactor={0.05}
-            minDistance={1.8}
+            minDistance={1.6}
             maxDistance={5.5}
             autoRotate={!prefersReducedMotion && !tracingVessel}
             autoRotateSpeed={0.6}
@@ -527,16 +591,155 @@ export function HeartViewer({
         </Canvas>
       </div>
 
-      {/* External Keyboard-Accessible Vessel Selector List */}
-      <VesselList
-        configs={vesselsList}
-        vessels={effectiveVessels}
-        selectedVessel={selectedVessel}
-        onSelectVessel={onSelectVessel}
-      />
+      {/* 3. Keyboard-Accessible Vessel Selector Chips (Directly under canvas, always visible) */}
+      <div
+        role="region"
+        aria-label="Coronary Artery Selection Chips"
+        className="flex items-center justify-between px-3.5 py-1.5 bg-slate-950 border-t border-slate-800/80 shrink-0 text-xs"
+      >
+        <div className="flex items-center gap-1.5 overflow-x-auto py-0.5">
+          <span className="text-[10px] uppercase font-semibold text-slate-500 mr-1 hidden sm:inline">
+            Arteries:
+          </span>
+          {vesselsList.map((cfg) => {
+            const isSelected = selectedVessel === cfg.id;
+            const data = effectiveVessels[cfg.id];
+            const evalRes = evaluateVesselColor(data);
+            const probStr = data && data.probability !== null ? `${(data.probability * 100).toFixed(1)}%` : '—';
+            return (
+              <button
+                key={cfg.id}
+                type="button"
+                role="button"
+                aria-pressed={isSelected}
+                aria-label={`${cfg.displayName}: ${probStr}, ${evalRes.label}`}
+                onClick={() => onSelectVessel(isSelected ? null : cfg.id)}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition border ${
+                  isSelected
+                    ? 'bg-slate-800 text-white border-sky-400 shadow-sm ring-1 ring-sky-400/50'
+                    : 'bg-slate-900 text-slate-300 border-slate-700/80 hover:bg-slate-800 hover:text-white'
+                }`}
+              >
+                <span
+                  className="w-2 h-2 rounded-full shrink-0"
+                  style={{ backgroundColor: evalRes.hex }}
+                />
+                <span className="font-bold">{cfg.shortName}</span>
+                <span className="text-[11px] font-mono text-slate-400">{probStr}</span>
+              </button>
+            );
+          })}
+        </div>
 
-      {/* Dynamic Color Legend */}
-      <VesselLegend vessels={effectiveVessels} />
+        {selectedVessel && (
+          <button
+            type="button"
+            onClick={() => onSelectVessel(null)}
+            className="text-[10px] text-sky-400 hover:text-sky-300 underline font-mono shrink-0 ml-2"
+            aria-label="Clear vessel selection"
+          >
+            Clear selection
+          </button>
+        )}
+      </div>
+
+      {/* 4. Slim Bottom Strip: Pill, Compact Legend, Credit line, and Credits Expander */}
+      <div className="px-3.5 py-2 bg-slate-900 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-xs shrink-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-950/70 text-amber-300 border border-amber-800/60 whitespace-nowrap">
+            Illustrative anatomy, not patient imaging
+          </span>
+
+          <div className="flex items-center gap-2 text-[10px] text-slate-400 border-l border-slate-800 pl-2">
+            <div className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-[#10b981]" />
+              <span>&lt;t</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-[#eab308]" />
+              <span>&ge;t</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-[#f97316]" />
+              <span>&ge;t+0.15</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-[#ef4444]" />
+              <span>&ge;t+0.35</span>
+            </div>
+            <span className="text-slate-500 font-mono hidden md:inline">
+              ({selectedVessel ? selectedVessel.toUpperCase() : 'LAD'} t ={' '}
+              {((effectiveVessels[selectedVessel || 'lad']?.threshold ?? 0.501) * 100).toFixed(1)}%)
+            </span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 text-[10px] text-slate-400">
+          <span className="text-slate-400 truncate max-w-xs sm:max-w-none">
+            Heart model: Hannah Newey, University of Dundee (CC BY-NC-SA 4.0)
+          </span>
+
+          <button
+            type="button"
+            onClick={() => setShowCredits(!showCredits)}
+            className="text-sky-400 hover:text-sky-300 underline font-medium whitespace-nowrap"
+          >
+            {showCredits ? 'Close credits' : 'Credits'}
+          </button>
+        </div>
+      </div>
+
+      {/* Expanded Credits Panel (Exact trimmed equality to ATTRIBUTION.txt) */}
+      {showCredits && (
+        <div
+          data-testid="viewer-credits-panel"
+          className="p-3 bg-slate-950 border-t border-slate-800 text-[10px] text-slate-300 leading-relaxed font-mono whitespace-pre-wrap shrink-0"
+        >
+          <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-slate-800 text-[11px] font-sans font-semibold text-white">
+            <span>3D Model Attribution</span>
+            <button
+              type="button"
+              onClick={() => setShowCredits(false)}
+              className="text-slate-400 hover:text-white"
+            >
+              &times;
+            </button>
+          </div>
+          <p data-testid="viewer-credits-text">{heartAttributionText.trim()}</p>
+        </div>
+      )}
+
+      {/* Help ? Popover */}
+      {showHelp && (
+        <div
+          data-testid="viewer-help-popover"
+          className="p-3 bg-slate-950 border-t border-slate-800 text-xs text-slate-300 space-y-2 shrink-0"
+        >
+          <div className="flex items-center justify-between text-xs font-semibold text-white">
+            <span className="flex items-center gap-1.5 text-sky-400">
+              <Info className="w-3.5 h-3.5" /> 3D Viewport Interaction & Notes
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowHelp(false)}
+              className="text-slate-400 hover:text-white"
+            >
+              &times;
+            </button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-slate-300">
+            <div>
+              <span className="font-semibold text-white">Navigation:</span> Rotate: Left Click + Drag &bull; Zoom: Scroll &bull; Pan: Right Click
+            </div>
+            <div>
+              <span className="font-semibold text-white">Selection:</span> Click vessel to highlight &bull; Click background to deselect
+            </div>
+          </div>
+          <p className="text-[10px] text-slate-400 leading-relaxed">
+            Coronary geometries depict stylized canonical perfusion tracts. Vessel coloring reflects screening probability models. Click a vessel to highlight; click background to deselect.
+          </p>
+        </div>
+      )}
 
       {/* Optional Dev Debug & Surface Tracing Panel (?debug) */}
       {isDebugMode && (

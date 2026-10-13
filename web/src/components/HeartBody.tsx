@@ -10,6 +10,7 @@ export interface HeartBodyProps {
   transform?: HeartTransformConfig;
   onMeshPointerDown?: (point: THREE.Vector3, normal?: THREE.Vector3) => void;
   meshRef?: React.RefObject<THREE.Mesh | null>;
+  onMeshReady?: (mesh: THREE.Mesh) => void;
 }
 
 /**
@@ -102,12 +103,14 @@ function GLTFHeart({
   transform = defaultHeartTransform,
   onMeshPointerDown,
   meshRef,
+  onMeshReady,
 }: {
   url: string;
   xRay?: boolean;
   transform?: HeartTransformConfig;
   onMeshPointerDown?: (point: THREE.Vector3, normal?: THREE.Vector3) => void;
   meshRef?: React.RefObject<THREE.Mesh | null>;
+  onMeshReady?: (mesh: THREE.Mesh) => void;
 }) {
   const { scene } = useGLTF(url, false, true, (loader) => {
     const decoder = typeof MeshoptDecoder === 'function' ? MeshoptDecoder() : MeshoptDecoder;
@@ -122,6 +125,9 @@ function GLTFHeart({
         internalMeshRef.current = mesh;
         if (meshRef) {
           (meshRef as React.MutableRefObject<THREE.Mesh | null>).current = mesh;
+        }
+        if (onMeshReady) {
+          onMeshReady(mesh);
         }
 
         const geom = mesh.geometry;
@@ -143,7 +149,7 @@ function GLTFHeart({
         });
       }
     });
-  }, [scene, xRay, meshRef]);
+  }, [scene, xRay, meshRef, onMeshReady]);
 
   const rotationRad: [number, number, number] = [
     THREE.MathUtils.degToRad(transform.rotation[0]),
@@ -208,6 +214,7 @@ export function HeartBody({
   transform = defaultHeartTransform,
   onMeshPointerDown,
   meshRef,
+  onMeshReady,
 }: HeartBodyProps) {
   const [modelAvailable, setModelAvailable] = useState<boolean>(false);
 
@@ -236,6 +243,7 @@ export function HeartBody({
           transform={transform}
           onMeshPointerDown={onMeshPointerDown}
           meshRef={meshRef}
+          onMeshReady={onMeshReady}
         />
       </HeartErrorBoundary>
     );

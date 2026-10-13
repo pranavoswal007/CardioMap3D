@@ -3,12 +3,10 @@ import {
   Heart,
   Server,
   RefreshCw,
-  Layers,
   Activity,
   ShieldCheck,
   Info,
   AlertCircle,
-  HeartPulse,
   Sliders,
 } from 'lucide-react';
 import type { VesselId, VesselData } from './types/viewer';
@@ -68,16 +66,15 @@ export function App() {
   const selectedVessel = useAppStore((s) => s.selectedVessel);
   const setSelectedVessel = useAppStore((s) => s.setSelectedVessel);
   const animateHeartbeat = useAppStore((s) => s.animateHeartbeat);
-  const setAnimateHeartbeat = useAppStore((s) => s.setAnimateHeartbeat);
   const whatIfActive = useAppStore((s) => s.whatIfActive);
   const setWhatIfActive = useAppStore((s) => s.setWhatIfActive);
 
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(() => {
-    if (typeof window === 'undefined') return false;
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
     return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   });
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
     const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
     const handler = (e: MediaQueryListEvent) => setPrefersReducedMotion(e.matches);
     mq.addEventListener('change', handler);
@@ -297,78 +294,33 @@ export function App() {
       {/* 2. MAIN WORKSPACE BASED ON TAB */}
       <main className="flex-1 p-6 max-w-[1800px] w-full mx-auto">
         {activeTab === 'patient' && (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {/* Left Column: 3D Visualization Canvas, Territory Map & Explanations (7 cols) */}
-            <section className="lg:col-span-7 flex flex-col gap-6">
-              <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-xl">
-                <div className="flex flex-wrap items-center justify-between gap-3 mb-3 pb-3 border-b border-slate-800">
-                  <div className="flex items-center gap-2">
-                    <Layers className="w-4 h-4 text-sky-400" />
-                    <h2 className="text-sm font-semibold tracking-wide uppercase text-slate-200">
-                      3D Anatomical Risk Projection & Territory Map
-                    </h2>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={animateHeartbeat && !prefersReducedMotion}
-                      disabled={prefersReducedMotion}
-                      onClick={() => setAnimateHeartbeat(!animateHeartbeat)}
-                      title={
-                        prefersReducedMotion
-                          ? 'Heartbeat animation disabled due to OS reduced motion setting'
-                          : animateHeartbeat
-                          ? 'Disable heartbeat animation'
-                          : 'Animate heartbeat at patient pulse rate'
-                      }
-                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors border ${
-                        animateHeartbeat && !prefersReducedMotion
-                          ? 'bg-rose-950/60 text-rose-300 border-rose-800/80 shadow-sm'
-                          : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-slate-200'
-                      } ${prefersReducedMotion ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    >
-                      <HeartPulse
-                        className={`w-3.5 h-3.5 ${
-                          animateHeartbeat && !prefersReducedMotion ? 'animate-pulse text-rose-400' : ''
-                        }`}
-                      />
-                      <span>Animate heartbeat</span>
-                      <span className="text-[10px] text-slate-400 font-mono">({clampedBpm} bpm)</span>
-                    </button>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start">
-                  <div className="xl:col-span-7 min-h-[500px]">
-                    <React.Suspense fallback={<HeartViewerFallback />}>
-                      <HeartViewer
-                        vessels={vesselsProp}
-                        selectedVessel={selectedVessel}
-                        onSelectVessel={setSelectedVessel}
-                        bpm={animateHeartbeat && !prefersReducedMotion ? clampedBpm : undefined}
-                      />
-                    </React.Suspense>
-                  </div>
-                  <div className="xl:col-span-5 flex flex-col justify-center">
-                    <React.Suspense fallback={<ComponentFallback label="territory map" />}>
-                      <TerritoryMap vessels={vesselsProp} />
-                    </React.Suspense>
-                  </div>
-                </div>
-              </div>
-
-              {/* Explanations Panel */}
-              <React.Suspense fallback={<ComponentFallback label="feature attributions" />}>
-                <ExplanationPanel />
+          <div className="flex flex-col lg:flex-row gap-6 items-start">
+            {/* Left Column: 3D Visualization Viewer (about 58%) - Sticky on Desktop */}
+            <section className="w-full lg:w-[58%] lg:sticky lg:top-4 z-20 self-start">
+              <React.Suspense fallback={<HeartViewerFallback />}>
+                <HeartViewer
+                  vessels={vesselsProp}
+                  selectedVessel={selectedVessel}
+                  onSelectVessel={setSelectedVessel}
+                  bpm={animateHeartbeat && !prefersReducedMotion ? clampedBpm : undefined}
+                />
               </React.Suspense>
             </section>
 
-            {/* Right Column: Prediction Cards, What-If Simulation & Patient Form (5 cols) */}
-            <section className="lg:col-span-5 flex flex-col gap-6">
+            {/* Right Column: Results, Territory Map, What-If, Explanations, Patient Form (~42%) */}
+            <section className="w-full lg:w-[42%] flex flex-col gap-6">
+              {/* 1. Results (CAD card, vessel cards) */}
               <ResultCards />
 
-              {/* What-If Mode Toggle Banner */}
+              {/* 2. Territory Map (AHA 17-segment, collapsible, centered, max-w-[320px]) */}
+              <React.Suspense fallback={<ComponentFallback label="territory map" />}>
+                <TerritoryMap
+                  vessels={vesselsProp}
+                  hasPrediction={Boolean(prediction)}
+                />
+              </React.Suspense>
+
+              {/* 3. What-If Mode Toggle Banner & Panel */}
               <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-lg flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Sliders className="w-4 h-4 text-indigo-400" />
@@ -401,13 +353,19 @@ export function App() {
                 </button>
               </div>
 
-              {whatIfActive ? (
+              {whatIfActive && (
                 <React.Suspense fallback={<ComponentFallback label="what-if exploration" />}>
                   <WhatIfPanel />
                 </React.Suspense>
-              ) : (
-                <PatientForm />
               )}
+
+              {/* 4. Explanation Panel */}
+              <React.Suspense fallback={<ComponentFallback label="feature attributions" />}>
+                <ExplanationPanel />
+              </React.Suspense>
+
+              {/* 5. Patient Form (collapses into one-line summary after prediction) */}
+              <PatientForm />
             </section>
           </div>
         )}
