@@ -294,78 +294,119 @@ export function App() {
       {/* 2. MAIN WORKSPACE BASED ON TAB */}
       <main className="flex-1 p-6 max-w-[1800px] w-full mx-auto">
         {activeTab === 'patient' && (
-          <div className="flex flex-col lg:flex-row gap-6 items-start">
-            {/* Left Column: 3D Visualization Viewer (about 58%) - Sticky on Desktop */}
-            <section className="w-full lg:w-[58%] lg:sticky lg:top-4 z-20 self-start">
-              <React.Suspense fallback={<HeartViewerFallback />}>
-                <HeartViewer
-                  vessels={vesselsProp}
-                  selectedVessel={selectedVessel}
-                  onSelectVessel={setSelectedVessel}
-                  bpm={animateHeartbeat && !prefersReducedMotion ? clampedBpm : undefined}
-                />
-              </React.Suspense>
-            </section>
-
-            {/* Right Column: Results, Territory Map, What-If, Explanations, Patient Form (~42%) */}
-            <section className="w-full lg:w-[42%] flex flex-col gap-6">
-              {/* 1. Results (CAD card, vessel cards) */}
-              <ResultCards />
-
-              {/* 2. Territory Map (AHA 17-segment, collapsible, centered, max-w-[320px]) */}
-              <React.Suspense fallback={<ComponentFallback label="territory map" />}>
-                <TerritoryMap
-                  vessels={vesselsProp}
-                  hasPrediction={Boolean(prediction)}
-                />
-              </React.Suspense>
-
-              {/* 3. What-If Mode Toggle Banner & Panel */}
-              <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-lg flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Sliders className="w-4 h-4 text-indigo-400" />
-                  <div>
-                    <span className="text-xs font-semibold text-white">What-If Sensitivity Simulation</span>
-                    <p className="text-[10px] text-slate-400">
-                      {prediction
-                        ? 'Test hypothetical adjustments to modifiable factors'
-                        : 'Run baseline analysis first to enable What-If simulation'}
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={whatIfActive}
-                  disabled={!prediction && !whatIfActive}
-                  onClick={() => setWhatIfActive(!whatIfActive)}
-                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-slate-900 ${
-                    whatIfActive ? 'bg-indigo-600' : 'bg-slate-800'
-                  } ${!prediction && !whatIfActive ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  title={!prediction ? 'Run baseline prediction first' : 'Toggle What-If mode'}
-                >
-                  <span
-                    aria-hidden="true"
-                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
-                      whatIfActive ? 'translate-x-5' : 'translate-x-0'
-                    }`}
+          <div
+            data-testid="patient-tab-layout"
+            className="flex flex-col lg:flex-row gap-6 items-start"
+          >
+            {/* Left Column: 3D Visualization Viewer + Attributions Panel (~58% on Desktop) */}
+            <section
+              data-testid="left-column"
+              className="contents lg:flex lg:flex-col lg:w-[58%] gap-6"
+            >
+              {/* 1. Heart Viewer Card */}
+              <div
+                data-testid="viewer-wrapper"
+                className="order-1 lg:order-1 w-full"
+              >
+                <React.Suspense fallback={<HeartViewerFallback />}>
+                  <HeartViewer
+                    vessels={vesselsProp}
+                    selectedVessel={selectedVessel}
+                    onSelectVessel={setSelectedVessel}
+                    bpm={animateHeartbeat && !prefersReducedMotion ? clampedBpm : undefined}
                   />
-                </button>
+                </React.Suspense>
               </div>
 
-              {whatIfActive && (
-                <React.Suspense fallback={<ComponentFallback label="what-if exploration" />}>
-                  <WhatIfPanel />
+              {/* 2. Estimated Local Feature Attributions Panel (directly beneath viewer card) */}
+              <div
+                id="explanation-panel"
+                data-testid="attributions-wrapper"
+                className="order-5 lg:order-2 w-full min-h-[320px] [&>div]:min-h-[320px]"
+              >
+                <React.Suspense fallback={<ComponentFallback label="feature attributions" />}>
+                  <ExplanationPanel />
                 </React.Suspense>
-              )}
+              </div>
+            </section>
 
-              {/* 4. Explanation Panel */}
-              <React.Suspense fallback={<ComponentFallback label="feature attributions" />}>
-                <ExplanationPanel />
-              </React.Suspense>
+            {/* Right Column: Results, What-If, Territory Map, Patient Form (~42% on Desktop) */}
+            <section
+              data-testid="right-column"
+              className="contents lg:flex lg:flex-col lg:w-[42%] gap-6"
+            >
+              {/* 1. Results (CAD card, vessel cards) */}
+              <div
+                data-testid="results-wrapper"
+                className="order-2 lg:order-1 w-full"
+              >
+                <ResultCards />
+              </div>
 
-              {/* 5. Patient Form (collapses into one-line summary after prediction) */}
-              <PatientForm />
+              {/* 2. What-If Mode Toggle Banner & Panel (placed directly under vessel cards for visibility in first 900px) */}
+              <div
+                data-testid="what-if-wrapper"
+                className="order-4 lg:order-2 w-full space-y-4"
+              >
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-lg flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Sliders className="w-4 h-4 text-indigo-400" />
+                    <div>
+                      <span className="text-xs font-semibold text-white">What-If Sensitivity Simulation</span>
+                      <p className="text-[10px] text-slate-400">
+                        {prediction
+                          ? 'Test hypothetical adjustments to modifiable factors'
+                          : 'Run baseline analysis first to enable What-If simulation'}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={whatIfActive}
+                    disabled={!prediction && !whatIfActive}
+                    onClick={() => setWhatIfActive(!whatIfActive)}
+                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-slate-900 ${
+                      whatIfActive ? 'bg-indigo-600' : 'bg-slate-800'
+                    } ${!prediction && !whatIfActive ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    title={!prediction ? 'Run baseline prediction first' : 'Toggle What-If mode'}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                        whatIfActive ? 'translate-x-5' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {whatIfActive && (
+                  <React.Suspense fallback={<ComponentFallback label="what-if exploration" />}>
+                    <WhatIfPanel />
+                  </React.Suspense>
+                )}
+              </div>
+
+              {/* 3. Territory Map (AHA 17-segment, collapsible, centered, max-w-[320px]) */}
+              <div
+                data-testid="territory-map-wrapper"
+                className="order-3 lg:order-3 w-full"
+              >
+                <React.Suspense fallback={<ComponentFallback label="territory map" />}>
+                  <TerritoryMap
+                    vessels={vesselsProp}
+                    hasPrediction={Boolean(prediction)}
+                  />
+                </React.Suspense>
+              </div>
+
+              {/* 4. Patient Form (collapses into one-line summary after prediction) */}
+              <div
+                data-testid="patient-form-wrapper"
+                className="order-6 lg:order-4 w-full"
+              >
+                <PatientForm />
+              </div>
             </section>
           </div>
         )}
