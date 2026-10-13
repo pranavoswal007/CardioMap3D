@@ -21,6 +21,7 @@ from fastapi.staticfiles import StaticFiles
 from .config import settings
 from .schemas import (
     CutoffThreshold,
+    ExplainerMetadata,
     ExplainResponse,
     FeatureExplanation,
     HealthResponse,
@@ -287,8 +288,10 @@ def get_schema() -> SchemaResponse:
         prev = float(metrics_dict.get("targets", {}).get(t_code, {}).get("prevalence", {}).get("rate", 0.5))
         risk_cutoffs[short_name] = CutoffThreshold(
             operating_threshold=round(sel_t, 4),
+            threshold=round(sel_t, 4),
             moderate_min=round(sel_t, 4),
             high_min=round(sel_t + settings.risk_level_margin, 4),
+            high_threshold=round(sel_t + settings.risk_level_margin, 4),
             cohort_prevalence=round(prev, 4),
         )
 
@@ -361,10 +364,11 @@ def compute_prediction_for_target(short_name: str, df_patient: pd.DataFrame) -> 
 
     # Strict risk_level rule derived from selected_threshold t
     margin = settings.risk_level_margin
+    high_t = sel_t + margin
     if p < sel_t:
         risk_level = "low"
         label = 0
-    elif p < sel_t + margin:
+    elif p < high_t:
         risk_level = "moderate"
         label = 1
     else:
@@ -379,6 +383,8 @@ def compute_prediction_for_target(short_name: str, df_patient: pd.DataFrame) -> 
         risk_level=risk_level,
         cohort_prevalence=round(prev, 4),
         relative_risk=rel_risk,
+        threshold=round(sel_t, 4),
+        high_threshold=round(high_t, 4),
     )
 
 
@@ -555,9 +561,19 @@ def explain_stenosis_prediction(patient_features: dict[str, Any], top_n: int = 1
                         stability_label=f_stab_p,
                     ))
 
+    bg_size = len(STATE["shap_background"]) if STATE.get("shap_background") is not None else 30
+    explainer_metadata = ExplainerMetadata(
+        method="KernelExplainer",
+        background_size=int(bg_size),
+        nsamples=150,
+        unit="probability points",
+        note="Attributions are estimated, describe the displayed calibrated probability, and are not causes.",
+    )
+
     response = ExplainResponse(
         targets=target_explanations,
         physiology=physiology_items,
+        explainer=explainer_metadata,
         model_version=settings.app_version,
         interpretation_note=(
             "Explanations describe the displayed calibrated probability in probability points "

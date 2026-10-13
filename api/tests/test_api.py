@@ -72,7 +72,9 @@ def test_schema_endpoint(client: TestClient) -> None:
     assert set(data["risk_cutoffs"].keys()) == {"cad", "lad", "lcx", "rca"}
     for cutoff in data["risk_cutoffs"].values():
         assert cutoff["operating_threshold"] > 0
+        assert cutoff["threshold"] == cutoff["operating_threshold"]
         assert cutoff["high_min"] == round(cutoff["operating_threshold"] + 0.15, 4)
+        assert cutoff["high_threshold"] == cutoff["high_min"]
         assert 0.0 < cutoff["cohort_prevalence"] < 1.0
 
 
@@ -98,6 +100,8 @@ def test_predict_full_features(client: TestClient) -> None:
     assert cad["label"] in (0, 1)
     assert cad["risk_level"] in ("low", "moderate", "high")
     assert cad["relative_risk"] > 0
+    assert "threshold" in cad and cad["threshold"] > 0
+    assert "high_threshold" in cad and cad["high_threshold"] == round(cad["threshold"] + 0.15, 4)
 
     # Vessels
     vessels = data["vessels"]
@@ -105,6 +109,8 @@ def test_predict_full_features(client: TestClient) -> None:
     for v_pred in vessels.values():
         assert PROBABILITY_CLIP_MIN <= v_pred["probability"] <= PROBABILITY_CLIP_MAX
         assert v_pred["risk_level"] in ("low", "moderate", "high")
+        assert "threshold" in v_pred and v_pred["threshold"] > 0
+        assert "high_threshold" in v_pred and v_pred["high_threshold"] == round(v_pred["threshold"] + 0.15, 4)
 
     # Imputation tracking
     assert len(data["imputed_features"]) == 55 - len(sample_input)
@@ -113,7 +119,7 @@ def test_predict_full_features(client: TestClient) -> None:
 
 
 def test_risk_level_rule_consistency(client: TestClient) -> None:
-    """Verify strict consistency: label == 1 iff risk_level in ('moderate', 'high')."""
+    """Verify strict consistency: label == 1 iff risk_level in ('moderate', 'high') and cutoffs match."""
     sample_input = {"Age": 55, "Sex": "Fmale"}
     response = client.post("/predict", json=sample_input)
     assert response.status_code == 200
@@ -124,10 +130,18 @@ def test_risk_level_rule_consistency(client: TestClient) -> None:
         p = pred["probability"]
         level = pred["risk_level"]
         lbl = pred["label"]
+        t = pred["threshold"]
+        ht = pred["high_threshold"]
+        assert ht == round(t + 0.15, 4)
         if level == "low":
             assert lbl == 0, f"Low risk must have label 0, got {lbl} for p={p}"
+            assert p < t, f"Low risk must have p < t ({t}), got {p}"
+        elif level == "moderate":
+            assert lbl == 1, f"Moderate risk must have label 1, got {lbl} for p={p}"
+            assert t <= p < ht, f"Moderate risk must have t <= p < ht ({t} <= {p} < {ht})"
         else:
-            assert lbl == 1, f"Moderate or High risk must have label 1, got {lbl} for p={p}"
+            assert lbl == 1, f"High risk must have label 1, got {lbl} for p={p}"
+            assert p >= ht, f"High risk must have p >= ht ({ht}), got {p}"
 
 
 def test_forbidden_columns_rejected(client: TestClient) -> None:
@@ -196,6 +210,16 @@ def test_explain_endpoint(client: TestClient) -> None:
     assert "interpretation_note" in data
     assert "calibrated probability" in data["interpretation_note"]
     assert "not causal findings" in data["interpretation_note"]
+
+    assert "explainer" in data
+    expl = data["explainer"]
+    assert expl["method"] == "KernelExplainer"
+    assert isinstance(expl["background_size"], int) and expl["background_size"] > 0
+    assert expl["nsamples"] == 150
+    assert expl["unit"] == "probability points"
+    assert "attributions are estimated" in expl["note"].lower()
+    assert "describe the displayed calibrated probability" in expl["note"].lower()
+    assert "are not causes" in expl["note"].lower()
 
     for t_exp in data["targets"].values():
         assert len(t_exp["contributions"]) <= 10
@@ -305,3 +329,24 @@ def test_parity_between_api_and_offline_pipeline(client: TestClient, raw_dataset
                 atol=1e-4,
                 err_msg=f"Parity failure for {t_name} on row index {idx}",
             )
+
+
+def test_openapi_schema_has_threshold_and_explainer(client: TestClient) -> None:
+    """Verify OpenAPI schema publishes threshold, high_threshold, and explainer fields."""
+    response = client.get("/openapi.json")
+    assert response.status_code == 200
+    schema = response.json()
+    schemas = schema["components"]["schemas"]
+
+    assert "threshold" in schemas["TargetPrediction"]["properties"]
+    assert "high_threshold" in schemas["TargetPrediction"]["properties"]
+
+    assert "threshold" in schemas["CutoffThreshold"]["properties"]
+    assert "high_threshold" in schemas["CutoffThreshold"]["properties"]
+
+    assert "explainer" in schemas["ExplainResponse"]["properties"]
+    assert "ExplainerMetadata" in schemas
+    expl_props = schemas["ExplainerMetadata"]["properties"]
+    for req_field in ["method", "background_size", "nsamples", "unit", "note"]:
+        assert req_field in expl_props, f"Field '{req_field}' missing from ExplainerMetadata schema"
+

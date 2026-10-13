@@ -321,3 +321,30 @@ def test_feature_schema_completeness(raw_data: tuple[pd.DataFrame, pd.DataFrame,
         assert "group" in entry
         assert entry["group"] in ("demographics", "history", "vitals", "symptoms", "ecg", "labs", "echo")
         assert "default" in entry
+
+
+def test_baseline_comparison_table_integrity() -> None:
+    """Verify baseline comparison table in metrics.json is present, accurate, and avoids plain accuracy confusion."""
+    metrics_path = Path("artifacts/metrics.json")
+    thresholds_path = Path("artifacts/thresholds.json")
+    assert metrics_path.exists()
+    assert thresholds_path.exists()
+
+    with open(metrics_path, encoding="utf-8") as f:
+        metrics = json.load(f)
+    with open(thresholds_path, encoding="utf-8") as f:
+        thresholds = json.load(f)
+
+    assert "baseline_comparison_table" in metrics
+    table = metrics["baseline_comparison_table"]
+    assert set(table.keys()) == {"y_cad", "y_lad", "y_lcx", "y_rca"}
+
+    for target, row in table.items():
+        assert row["operating_cutoff"] == thresholds[target]["selected_threshold"]
+        assert row["trivial_f1"] > 0
+        assert row["f1_at_operating_cutoff"] > row["trivial_f1"]
+        # Balanced accuracy at cutoff must NOT equal plain accuracy at 0.50 (Phase 2.5 regression check)
+        assert abs(row["balanced_accuracy_at_cutoff"] - row["accuracy_at_50"]) > 0.01
+        assert abs(row["f1_gain_over_trivial"] - (row["f1_at_operating_cutoff"] - row["trivial_f1"])) < 1e-3
+        assert 0.70 <= row["roc_auc"] <= 1.0
+

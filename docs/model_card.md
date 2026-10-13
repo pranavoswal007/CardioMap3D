@@ -50,6 +50,10 @@ Local feature attributions explain the **deployed function**: the final calibrat
 * **Signed Relative Contribution %**: Computed as signed normalized percentage: $\text{sign}(\text{shap}_i) \cdot \frac{|\text{shap}_i|}{\sum_{j} |\text{shap}_j|} \times 100\%$.
 * **Association vs. Causation**: Explanations describe the displayed calibrated probability in probability points and reflect model-learned associations within this dataset, **not causal findings**. Altering a patient's modifiable biomarker (e.g., lowering triglycerides or blood sugar) will change the model's computed score, but the attribution does not prove that the biomarker directly caused or will reverse coronary plaque formation.
 * **Feature Stability**: Sodium `Na`, height `Length`, platelet count `PLT`, and leukocyte counts `WBC`/`Lymph`/`Neut` demonstrate moderate-to-low ranking stability across bootstrap resamples (persistence $< 0.8$) and likely reflect sample-specific statistical correlations rather than stable pathophysiological drivers.
+* **Stability Provenance & Discrepancy Disclosure**:
+  - **Generation Method**: `artifacts/shap_stability.json` was generated in Phase 1.5 (2026-10-12) using native `TreeExplainer` on uncalibrated tree estimators (and `LinearExplainer` for logistic regression) across $B = 20$ bootstrap resamples ($N = 303$ with replacement).
+  - **Runtime Method**: Deployed explanations in Phase 2.5/2.6 use model-agnostic `shap.KernelExplainer` evaluating the full 5-fold calibrated probability pipeline directly on the 55 raw input features (in probability points).
+  - **Discrepancy Note**: The feature persistence scores and stability labels (`stable`, `moderate`, `low`) stored in `artifacts/shap_stability.json` reflect tree-model margin ranking stability across 20 bootstrap resamples rather than repeated KernelExplainer resampling (which would require $>2$ hours of compute across the cohort). Top clinical predictors (Typical Chest Pain, Region RWMA, Age) remain stable across both paradigms, but stability labels originate from the native tree/linear explainer bootstrap audit.
 
 ---
 
@@ -60,15 +64,15 @@ In clinical datasets with non-uniform class distribution, evaluating models agai
 
 | Target | Cohort Prevalence | Trivial Baseline $F_1$ (Flag Everyone) | Model $F_1$ @ Default 0.50 | Model Operating Cutoff ($t$) | Model $F_1$ @ Operating Cutoff ($t$) | $F_1$ Gain over Trivial | Balanced Accuracy | ROC-AUC [95% CI] |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **`y_cad`** | **71.29%** (216 / 303) | 0.8324 | 0.9058 | **0.5377** | **0.9058** | **+0.0734** | 0.8614 | **0.9256** [0.8915, 0.9545] |
-| **`y_lad`** | **58.42%** (177 / 303) | 0.7375 | 0.8373 | **0.5006** | **0.8373** | **+0.0998** | 0.7987 | **0.8453** [0.7967, 0.8882] |
-| **`y_lcx`** | **39.27%** (119 / 303) | 0.5640 | 0.4674 | **0.3973** | **0.6020** | **+0.0380** | 0.6766 | **0.7235** [0.6650, 0.7761] |
-| **`y_rca`** | **37.62%** (114 / 303) | 0.5468 | 0.4773 | **0.3354** | **0.6070** | **+0.0602** | 0.6964 | **0.7397** [0.6826, 0.7921] |
+| **`y_cad`** | **71.29% (216 / 303)** | 0.8324 | 0.9058 | **0.5377** | **0.9140** | **+0.0817** | 0.8297 | **0.9256** [0.8915, 0.9545] |
+| **`y_lad`** | **58.42% (177 / 303)** | 0.7375 | 0.8373 | **0.5006** | **0.8365** | **+0.0990** | 0.7819 | **0.8453** [0.7967, 0.8882] |
+| **`y_lcx`** | **39.27% (119 / 303)** | 0.5640 | 0.4674 | **0.3973** | **0.6491** | **+0.0851** | 0.6983 | **0.7235** [0.6650, 0.7761] |
+| **`y_rca`** | **37.62% (114 / 303)** | 0.5468 | 0.4773 | **0.3354** | **0.6341** | **+0.0874** | 0.6822 | **0.7397** [0.6826, 0.7921] |
 
 ### B. Clinical Context: LCX and RCA Operating Thresholds Near/Below Prevalence
 A critical clinical finding is that the optimal operating threshold for `y_lcx` ($t = 0.3973$) is almost identical to cohort prevalence ($39.27\%$), and the operating threshold for `y_rca` ($t = 0.3354$) is strictly below cohort prevalence ($37.62\%$).
 * **Why default 0.50 fails on LCX and RCA**: Because both LCX and RCA exhibit negative-class majority (prevalences ~38–39%), standard $0.50$ decision boundaries incur severe false negative rates, resulting in poor default $F_1$ scores (0.4674 and 0.4773), which are lower than the trivial "flag everyone" baseline.
-* **Sensitivity-Optimized Cutoffs**: In pre-catheterization screening, missed stenoses (false negatives) are clinically hazardous. Tuning thresholds to maximize Youden's $J$ and screening $F_1$ lowers the decision threshold to $0.3973$ (LCX) and $0.3354$ (RCA), boosting sensitivity and lifting $F_1$ to $0.6020$ and $0.6070$, outperforming the trivial baseline.
+* **Sensitivity-Optimized Cutoffs**: In pre-catheterization screening, missed stenoses (false negatives) are clinically hazardous. Tuning thresholds to maximize Youden's $J$ and screening $F_1$ lowers the decision threshold to $0.3973$ (LCX) and $0.3354$ (RCA), boosting sensitivity and lifting $F_1$ to $0.6491$ and $0.6341$, outperforming the trivial baseline.
 * **Clinical Nuance of the "Moderate Risk" Label**:
   Under CardioMap 3D's strict risk mapping rules, a patient with $p \ge t$ receives a "Moderate" or "High" risk tier. Because $t_{\text{RCA}} = 0.3354$ and $t_{\text{LCX}} = 0.3973$, a patient categorized as "moderate risk" for RCA or LCX may have a calibrated probability near or slightly below the average cohort prevalence.
   **Clinical Interpretation**: The "Moderate Risk" label indicates that the patient's score exceeds the sensitivity-optimized screening threshold for further diagnostic workup, **not** that their risk is higher than the average referred patient in the registry.

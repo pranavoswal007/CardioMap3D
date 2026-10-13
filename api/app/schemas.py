@@ -19,8 +19,10 @@ class CutoffThreshold(BaseModel):
     """Threshold cutoffs for risk tier classification and UI legend display."""
 
     operating_threshold: float = Field(description="Selected operating cutoff t (Youden's J or Max F1)")
+    threshold: float = Field(description="Selected operating decision threshold (= operating_threshold)")
     moderate_min: float = Field(description="Lower bound for moderate risk (= t)")
     high_min: float = Field(description="Lower bound for high risk (= t + 0.15)")
+    high_threshold: float = Field(description="High risk threshold (= t + 0.15)")
     cohort_prevalence: float = Field(description="Prevalence of positive outcome in training cohort")
 
 
@@ -40,6 +42,8 @@ class TargetPrediction(BaseModel):
     risk_level: str = Field(description="'low', 'moderate', or 'high'")
     cohort_prevalence: float = Field(description="Baseline cohort prevalence rate")
     relative_risk: float = Field(description="Relative risk ratio (probability / cohort_prevalence)")
+    threshold: float = Field(description="Selected operating decision threshold separating Low from Moderate risk")
+    high_threshold: float = Field(description="High risk threshold (threshold + high margin)")
 
 
 class PredictResponse(BaseModel):
@@ -87,11 +91,25 @@ class PhysiologyItem(BaseModel):
     stability_label: str
 
 
+class ExplainerMetadata(BaseModel):
+    """Metadata describing the explanation method, sampling parameters, and clinical interpretation."""
+
+    method: str = Field(default="KernelExplainer", description="Model-agnostic explainer method")
+    background_size: int = Field(default=30, description="Size of stratified background reference sample")
+    nsamples: int = Field(default=150, description="Number of Monte Carlo feature perturbation samples per patient")
+    unit: str = Field(default="probability points", description="Attribution unit")
+    note: str = Field(
+        default="Attributions are estimated using a model-agnostic explainer, describe the displayed calibrated probability in probability points, and reflect model-learned statistical associations rather than causal findings.",
+        description="Clinical interpretation note",
+    )
+
+
 class ExplainResponse(BaseModel):
     """Full SHAP explainability response."""
 
     targets: dict[str, TargetExplanation] = Field(description="Explanations per target (cad, lad, lcx, rca)")
     physiology: list[PhysiologyItem] = Field(description="Key physiological measurement attributions for overall CAD")
+    explainer: ExplainerMetadata = Field(description="Explanation method, background sample size, and sampling parameters")
     model_version: str
     interpretation_note: str = Field(
         default="Explanations describe the displayed calibrated probability in probability points and reflect model-learned associations, not causal findings.",

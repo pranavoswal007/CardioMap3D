@@ -84,10 +84,10 @@ In clinical cohorts with class imbalance, comparing model operating points again
 
 | Target | Cohort Prevalence | Trivial Baseline $F_1$ (Flag Everyone) | Model $F_1$ @ Default 0.50 | Model Operating Cutoff ($t$) | Model $F_1$ @ Operating Cutoff ($t$) | $F_1$ Delta vs Trivial | Balanced Accuracy |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **`y_cad`** | **71.29%** (216 / 303) | 0.8324 | 0.9058 | **0.5377** | **0.9058** | **+0.0734** | 0.8614 |
-| **`y_lad`** | **58.42%** (177 / 303) | 0.7375 | 0.8373 | **0.5006** | **0.8373** | **+0.0998** | 0.7987 |
-| **`y_lcx`** | **39.27%** (119 / 303) | 0.5640 | 0.4674 | **0.3973** | **0.6020** | **+0.0380** | 0.6766 |
-| **`y_rca`** | **37.62%** (114 / 303) | 0.5468 | 0.4773 | **0.3354** | **0.6070** | **+0.0602** | 0.6964 |
+| **`y_cad`** | **71.29% (216 / 303)** | 0.8324 | 0.9058 | **0.5377** | **0.9140** | **+0.0817** | 0.8297 |
+| **`y_lad`** | **58.42% (177 / 303)** | 0.7375 | 0.8373 | **0.5006** | **0.8365** | **+0.0990** | 0.7819 |
+| **`y_lcx`** | **39.27% (119 / 303)** | 0.5640 | 0.4674 | **0.3973** | **0.6491** | **+0.0851** | 0.6983 |
+| **`y_rca`** | **37.62% (114 / 303)** | 0.5468 | 0.4773 | **0.3354** | **0.6341** | **+0.0874** | 0.6822 |
 
 #### Clinical Context: Why LCX & RCA Thresholds Fall Near or Below Cohort Prevalence
 - For LCX and RCA, prevalence in this registry is ~38–39%. Uncalibrated 0.50 decision thresholds heavily penalize the positive class, producing low default $F_1$ scores (0.4674 and 0.4773) that underperform the trivial baseline.
