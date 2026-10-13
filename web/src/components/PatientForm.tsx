@@ -84,6 +84,18 @@ export function PatientForm() {
     e.preventDefault();
     void runPredictionFlow();
     setIsEditing(false);
+
+    // Smoothly scroll directly upwards towards 3D heart model
+    if (typeof window !== 'undefined') {
+      const viewer =
+        document.getElementById('heart-viewer-section') ||
+        document.querySelector('[data-testid="viewer-wrapper"]');
+      if (viewer && typeof viewer.scrollIntoView === 'function') {
+        viewer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } else if (typeof window.scrollTo === 'function') {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    }
   };
 
   if (prediction && !isEditing) {

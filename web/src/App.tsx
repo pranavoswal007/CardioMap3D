@@ -305,6 +305,7 @@ export function App() {
             >
               {/* 1. Heart Viewer Card */}
               <div
+                id="heart-viewer-section"
                 data-testid="viewer-wrapper"
                 className="order-1 lg:order-1 w-full"
               >

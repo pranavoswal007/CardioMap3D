@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import * as THREE from 'three';
 import fs from 'fs';
 import path from 'path';
@@ -176,5 +176,17 @@ describe('T2-1.2: Attributions Panel Placement, Column Balance, and Order', () =
 
     const matches = scanDir(srcDir);
     expect(matches).toEqual([]);
+  });
+
+  it('smoothly scrolls directly upwards towards 3D heart model when clicking Analyze Coronary Stenosis Risk', async () => {
+    const scrollIntoViewMock = vi.fn();
+    window.HTMLElement.prototype.scrollIntoView = scrollIntoViewMock;
+
+    render(<App />);
+
+    const analyzeBtn = await screen.findByRole('button', { name: /Analyze Coronary Stenosis Risk/i });
+    fireEvent.click(analyzeBtn);
+
+    expect(scrollIntoViewMock).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
   });
 });
