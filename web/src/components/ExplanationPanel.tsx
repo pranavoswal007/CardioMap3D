@@ -164,22 +164,36 @@ export function ExplanationPanel() {
             </ResponsiveContainer>
           </div>
 
-          {/* Feature Badges list */}
+          {/* Feature Badges list with measurement values displayed next to SHAP contribution */}
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 pt-2">
             {chartData.map((item) => (
               <div
                 key={item.name}
-                className="p-2 bg-slate-950/60 rounded border border-slate-800 text-[11px] flex flex-col justify-between"
+                className="p-2.5 bg-slate-950/70 rounded-lg border border-slate-800 text-[11px] flex flex-col justify-between gap-1.5"
               >
-                <div className="font-medium text-slate-200 truncate" title={item.name}>
-                  {item.name}
-                </div>
-                <div className="flex items-center justify-between mt-1 text-[10px]">
-                  <span className={item.shap_value > 0 ? 'text-rose-400 font-semibold' : 'text-emerald-400 font-semibold'}>
-                    {item.shap_value > 0 ? '+' : ''}{item.shap_value.toFixed(3)}
+                <div className="flex items-start justify-between gap-1">
+                  <span className="font-medium text-slate-200 truncate" title={item.name}>
+                    {item.name}
                   </span>
                   <span
-                    className={`px-1.5 py-0.2 rounded uppercase font-semibold text-[9px] ${
+                    className="text-[10px] text-slate-300 font-mono shrink-0 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800"
+                    title={`Patient measurement value: ${item.patientValue}`}
+                  >
+                    val: {item.patientValue !== undefined && item.patientValue !== null && item.patientValue !== '' ? String(item.patientValue) : '—'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-[10px] pt-1 border-t border-slate-800/60">
+                  <span
+                    className={
+                      item.shap_value > 0
+                        ? 'text-rose-400 font-semibold font-mono'
+                        : 'text-emerald-400 font-semibold font-mono'
+                    }
+                  >
+                    {item.shap_value > 0 ? '+' : ''}{item.shap_value.toFixed(3)} pts
+                  </span>
+                  <span
+                    className={`px-1.5 py-0.5 rounded uppercase font-semibold text-[9px] ${
                       item.stability === 'stable'
                         ? 'bg-emerald-950 text-emerald-300 border border-emerald-800/60'
                         : item.stability === 'moderate'

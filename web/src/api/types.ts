@@ -78,3 +78,17 @@ export interface ClinicalBaselineTarget {
     significance?: string;
   };
 }
+
+export interface CandidateModelInfo {
+  metrics?: {
+    accuracy?: MetricPointEstimate;
+    precision?: MetricPointEstimate;
+    recall?: MetricPointEstimate;
+    f1?: MetricPointEstimate;
+    roc_auc?: MetricPointEstimate;
+    pr_auc?: MetricPointEstimate;
+    brier_score?: MetricPointEstimate;
+  };
+  best_params?: Record<string, unknown>;
+  calibration_brier?: number;
+}
