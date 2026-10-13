@@ -56,6 +56,7 @@ export function App() {
   const setSchemaData = useAppStore((s) => s.setSchemaData);
   const setSamplePatients = useAppStore((s) => s.setSamplePatients);
   const prediction = useAppStore((s) => s.prediction);
+  const patientInputs = useAppStore((s) => s.patientInputs);
   const selectedVessel = useAppStore((s) => s.selectedVessel);
   const setSelectedVessel = useAppStore((s) => s.setSelectedVessel);
 
@@ -288,6 +289,13 @@ export function App() {
                       vessels={vesselsProp}
                       selectedVessel={selectedVessel}
                       onSelectVessel={setSelectedVessel}
+                      bpm={
+                        typeof patientInputs['Pulse'] === 'number'
+                          ? patientInputs['Pulse']
+                          : typeof patientInputs['Heart Rate'] === 'number'
+                          ? patientInputs['Heart Rate']
+                          : undefined
+                      }
                     />
                   </React.Suspense>
                 </div>

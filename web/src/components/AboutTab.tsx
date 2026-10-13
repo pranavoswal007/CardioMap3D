@@ -59,7 +59,7 @@ export function AboutTab() {
           <h3 className="text-sm font-semibold text-white">3D Anatomical Heart Model Attribution</h3>
         </div>
         <p className="text-xs text-slate-400 leading-relaxed">
-          The 3D heart and coronary artery visual representation is adapted under license.
+          Heart model by Hannah Newey, University of Dundee (CAHID), CC BY-NC-SA 4.0.
           The verbatim attribution statement is embedded below:
         </p>
 

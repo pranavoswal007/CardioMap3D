@@ -3,14 +3,16 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { VesselConfig, VesselData } from '../types/viewer';
 import { evaluateVesselColor } from '../utils/vesselColors';
+import { createTaperedTubeGeometry } from '../utils/taperedTube';
 
-interface CoronaryArteryMeshProps {
+export interface CoronaryArteryMeshProps {
   config: VesselConfig;
   data: VesselData;
   selected: boolean;
   hovered: boolean;
   onSelect: () => void;
   onHover: (hovered: boolean) => void;
+  overridePoints?: [number, number, number][];
 }
 
 export function CoronaryArteryMesh({
@@ -20,38 +22,44 @@ export function CoronaryArteryMesh({
   hovered,
   onSelect,
   onHover,
+  overridePoints,
 }: CoronaryArteryMeshProps) {
   const materialRef = useRef<THREE.MeshStandardMaterial>(null);
   const glowMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
 
-  // Compute curve from points once
+  const activePoints = overridePoints && overridePoints.length >= 2 ? overridePoints : config.points;
+
+  // Compute CatmullRom spline from control points
   const curve = useMemo(() => {
-    const vectors = config.points.map((p) => new THREE.Vector3(p[0], p[1], p[2]));
+    const vectors = activePoints.map((p) => new THREE.Vector3(p[0], p[1], p[2]));
     return new THREE.CatmullRomCurve3(vectors, false, 'catmullrom', 0.5);
-  }, [config.points]);
+  }, [activePoints]);
 
-  // Main tube geometry
+  // Main anatomical tube geometry with proximal-to-distal taper
   const tubeGeometry = useMemo(() => {
-    return new THREE.TubeGeometry(curve, 64, config.radius, 12, false);
+    const startRadius = config.radius * 1.15;
+    const endRadius = config.radius * 0.65;
+    return createTaperedTubeGeometry(curve, 64, startRadius, endRadius, 14);
   }, [curve, config.radius]);
 
-  // Selection outline/halo tube geometry
+  // Selection & hover halo geometry
   const glowGeometry = useMemo(() => {
-    return new THREE.TubeGeometry(curve, 64, config.radius * 1.5, 12, false);
+    const startRadius = config.radius * 1.55;
+    const endRadius = config.radius * 0.95;
+    return createTaperedTubeGeometry(curve, 48, startRadius, endRadius, 12);
   }, [curve, config.radius]);
 
-  // Target color evaluation from current data
+  // Target color evaluation from clinical risk thresholds
   const evaluation = useMemo(() => evaluateVesselColor(data), [data]);
   const targetColor = useMemo(() => new THREE.Color(evaluation.hex), [evaluation.hex]);
 
-  // Smooth per-frame color and glow interpolation (no allocations in loop)
+  // Smooth per-frame color and emissive glow transitions
   useFrame((_, delta) => {
     if (materialRef.current) {
-      // Lerp base color towards evaluated target color
       materialRef.current.color.lerp(targetColor, Math.min(1, delta * 6));
 
       // Emissive highlights
-      const emissiveIntensity = selected ? 0.75 : hovered ? 0.45 : 0.2;
+      const emissiveIntensity = selected ? 0.75 : hovered ? 0.45 : 0.22;
       materialRef.current.emissive.lerp(targetColor, Math.min(1, delta * 6));
       materialRef.current.emissiveIntensity = THREE.MathUtils.lerp(
         materialRef.current.emissiveIntensity,
@@ -81,7 +89,7 @@ export function CoronaryArteryMesh({
         onHover(false);
       }}
     >
-      {/* Outer Glow Tube for Selected or Hovered state */}
+      {/* Outer Glow Halo for Selected or Hovered state */}
       {(selected || hovered) && (
         <mesh geometry={glowGeometry}>
           <meshBasicMaterial
@@ -95,15 +103,18 @@ export function CoronaryArteryMesh({
         </mesh>
       )}
 
-      {/* Main Coronary Tube */}
+      {/* Main Epicardial Coronary Tube */}
       <mesh geometry={tubeGeometry}>
         <meshStandardMaterial
           ref={materialRef}
           color={evaluation.hex}
-          roughness={0.25}
-          metalness={0.35}
+          roughness={0.3}
+          metalness={0.2}
           emissive={evaluation.hex}
-          emissiveIntensity={selected ? 0.75 : 0.2}
+          emissiveIntensity={selected ? 0.75 : 0.22}
+          polygonOffset
+          polygonOffsetFactor={-1.5}
+          polygonOffsetUnits={-1.5}
         />
       </mesh>
     </group>

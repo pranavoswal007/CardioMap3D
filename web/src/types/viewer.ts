@@ -15,6 +15,14 @@ export interface HeartViewerProps {
   selectedVessel: VesselId | null;
   onSelectVessel: (id: VesselId | null) => void;
   className?: string;
+  bpm?: number;
+}
+
+export interface HeartTransformConfig {
+  position: [number, number, number];
+  rotation: [number, number, number];
+  scale: [number, number, number];
+  flip: [number, number, number];
 }
 
 export interface VesselConfig {
