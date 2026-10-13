@@ -5,11 +5,11 @@
 
  RUN  v3.2.4 /Users/pranavoswal/Projects/cardiomap3d/web
 
- ✓ src/test/phase3_5.test.tsx (4 tests) 24ms
- ✓ src/test/phase4.test.tsx (15 tests) 100ms
+ ✓ src/test/phase3_5.test.tsx (4 tests) 44ms
+ ✓ src/test/phase4.test.tsx (15 tests) 171ms
 
  Test Files  2 passed (2)
       Tests  19 passed (19)
-   Start at  20:01:03
-   Duration  1.07s (transform 92ms, setup 113ms, collect 511ms, tests 124ms, environment 629ms, prepare 98ms)
+   Start at  20:17:39
+   Duration  1.96s (transform 154ms, setup 165ms, collect 826ms, tests 215ms, environment 1.03s, prepare 229ms)
 
