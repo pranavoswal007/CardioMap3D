@@ -10,7 +10,7 @@ import { api, ApiClientError } from '../api/client';
 import type { TargetCode } from '../api/types';
 import { useAppStore } from '../store/useAppStore';
 
-export async function runPredictionFlow(): Promise<void> {
+export async function runPredictionFlow(specificTargets?: TargetCode[]): Promise<void> {
   const store = useAppStore.getState();
 
   // 1. Cancel any current requests
@@ -55,8 +55,11 @@ export async function runPredictionFlow(): Promise<void> {
     return; // Do not proceed to explain if prediction itself failed
   }
 
-  // 4. Sequential Explain: cad -> lad -> lcx -> rca
-  const targets: TargetCode[] = ['cad', 'lad', 'lcx', 'rca'];
+  // 4. Sequential Explain: cad -> lad -> lcx -> rca (or only specificTargets when specified)
+  const targets: TargetCode[] =
+    specificTargets && specificTargets.length > 0
+      ? specificTargets
+      : ['cad', 'lad', 'lcx', 'rca'];
 
   for (const target of targets) {
     // Check if user cancelled or reset while waiting

@@ -1,6 +1,6 @@
 import { AlertTriangle, HeartPulse, Activity } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
-import { getDisplayRiskLabel } from '../utils/riskLabels';
+import { getDisplayRiskLabel, getTierBandLabel } from '../utils/riskLabels';
 import type { TargetPrediction } from '../api/types';
 
 interface ProbabilityBarProps {
@@ -80,6 +80,7 @@ export function TargetCard({
   isVessel = false,
 }: TargetCardProps) {
   const displayLabel = getDisplayRiskLabel(prediction.risk_level);
+  const tierBand = getTierBandLabel(prediction.risk_level);
   const isElevated = prediction.probability >= prediction.threshold;
 
   return (
@@ -108,15 +109,22 @@ export function TargetCard({
           <div className="text-lg font-bold text-white tracking-tight">
             {(prediction.probability * 100).toFixed(1)}%
           </div>
-          <span
-            className={`inline-block px-2 py-0.5 rounded text-[10px] font-medium ${
-              isElevated
-                ? 'bg-amber-950/60 text-amber-300 border border-amber-800/60'
-                : 'bg-emerald-950/60 text-emerald-300 border border-emerald-800/60'
-            }`}
-          >
-            {displayLabel}
-          </span>
+          <div className="flex flex-col items-end gap-0.5">
+            <span
+              className={`inline-block px-2 py-0.5 rounded text-[10px] font-medium ${
+                isElevated
+                  ? 'bg-amber-950/60 text-amber-300 border border-amber-800/60'
+                  : 'bg-emerald-950/60 text-emerald-300 border border-emerald-800/60'
+              }`}
+            >
+              {displayLabel}
+            </span>
+            {tierBand && (
+              <span className="text-[9px] text-slate-400 font-mono">
+                {tierBand}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
@@ -167,13 +175,26 @@ export function ResultCards() {
   }
 
   const { cad, vessels, coherence, warnings } = prediction;
-  const coh = coherence as { is_incoherent?: boolean; raw_cad_probability?: number; max_vessel_probability?: number } | undefined;
+  const coh = coherence as {
+    is_incoherent?: boolean;
+    raw_cad_probability?: number;
+    adjusted_cad_probability?: number;
+    max_vessel_probability?: number;
+    note?: string;
+  } | undefined;
+
   const isIncoherent =
     coh &&
     (Boolean(coh.is_incoherent) ||
       (typeof coh.raw_cad_probability === 'number' &&
         typeof coh.max_vessel_probability === 'number' &&
         coh.raw_cad_probability < coh.max_vessel_probability));
+
+  // Never display API text claiming an "adjustment applied" unless a displayed probability was actually adjusted
+  const wasAdjusted =
+    coh &&
+    typeof coh.raw_cad_probability === 'number' &&
+    Math.abs(cad.probability - coh.raw_cad_probability) > 1e-5;
 
   return (
     <div className="space-y-4">
@@ -182,11 +203,12 @@ export function ResultCards() {
         <div className="p-3.5 bg-amber-950/40 border border-amber-800/80 rounded-xl text-amber-200 text-xs flex items-start gap-2.5">
           <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
           <div className="space-y-1">
-            <div className="font-semibold text-amber-300">Model-Consistency Notice</div>
-            <p className="text-slate-300 leading-relaxed">
-              Anatomical coherence audit flagged that overall CAD probability is lower than one of the branch vessel probabilities.
-              This is a statistical model characteristic and not a clinical diagnosis.
-            </p>
+            <div className="font-semibold text-amber-300">
+              Model consistency notice: at least one vessel probability is higher than the overall CAD probability. These outputs come from separate models, so treat this as an uncertainty flag, not a diagnosis.
+            </div>
+            {wasAdjusted && coh?.note && (
+              <p className="text-slate-300 leading-relaxed text-[11px]">{coh.note}</p>
+            )}
           </div>
         </div>
       )}

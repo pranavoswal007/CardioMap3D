@@ -15,6 +15,9 @@ export default defineConfig({
           ) {
             return 'three-drei';
           }
+          if (id.includes('node_modules/recharts')) {
+            return 'recharts';
+          }
         },
       },
     },

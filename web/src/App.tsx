@@ -14,13 +14,19 @@ import { useAppStore } from './store/useAppStore';
 import { api, ApiClientError } from './api/client';
 import { PatientForm } from './components/PatientForm';
 import { ResultCards } from './components/ResultCards';
-import { ExplanationPanel } from './components/ExplanationPanel';
-import { ValidationTab } from './components/ValidationTab';
-import { AboutTab } from './components/AboutTab';
 import { DisclaimerBanner } from './components/DisclaimerBanner';
 
-// Lazy-load the 3D anatomical viewer bundle
+// Lazy-load the heavy components and 3D viewer for optimal bundle performance
 const HeartViewer = React.lazy(() => import('./components/HeartViewer'));
+const ExplanationPanel = React.lazy(() =>
+  import('./components/ExplanationPanel').then((m) => ({ default: m.ExplanationPanel }))
+);
+const ValidationTab = React.lazy(() =>
+  import('./components/ValidationTab').then((m) => ({ default: m.ValidationTab }))
+);
+const AboutTab = React.lazy(() =>
+  import('./components/AboutTab').then((m) => ({ default: m.AboutTab }))
+);
 
 function HeartViewerFallback() {
   return (
@@ -32,6 +38,14 @@ function HeartViewerFallback() {
       <div className="text-[11px] text-slate-500">
         Loading WebGL Shaders & Anatomical Splines
       </div>
+    </div>
+  );
+}
+
+function ComponentFallback({ label }: { label: string }) {
+  return (
+    <div className="p-8 text-center text-xs text-slate-400 bg-slate-900 border border-slate-800 rounded-xl">
+      Loading {label}...
     </div>
   );
 }
@@ -280,7 +294,9 @@ export function App() {
               </div>
 
               {/* Explanations Panel */}
-              <ExplanationPanel />
+              <React.Suspense fallback={<ComponentFallback label="feature attributions" />}>
+                <ExplanationPanel />
+              </React.Suspense>
             </section>
 
             {/* Right Column: Prediction Cards & Patient Form (5 cols) */}
@@ -291,9 +307,17 @@ export function App() {
           </div>
         )}
 
-        {activeTab === 'validation' && <ValidationTab />}
+        {activeTab === 'validation' && (
+          <React.Suspense fallback={<ComponentFallback label="validation report" />}>
+            <ValidationTab />
+          </React.Suspense>
+        )}
 
-        {activeTab === 'about' && <AboutTab />}
+        {activeTab === 'about' && (
+          <React.Suspense fallback={<ComponentFallback label="about documentation" />}>
+            <AboutTab />
+          </React.Suspense>
+        )}
       </main>
 
       {/* 3. MANDATORY CANONICAL DISCLAIMER BANNER (STICKY, NOT DISMISSIBLE) */}

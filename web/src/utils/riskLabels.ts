@@ -14,10 +14,7 @@ export interface PairedBootstrapData {
 /**
  * Single canonical utility for clinical risk display labels.
  * Low tier -> "below screening cutoff"
- * Positive tiers -> "above screening cutoff" (highest tier -> "well above screening cutoff")
- *
- * Guarantees that neither raw API intermediate tier text nor the forbidden phrase
- * ever reaches the UI.
+ * Both positive tiers -> "above screening cutoff" (never the prohibited phrase)
  */
 export function getDisplayRiskLabel(riskLevel?: string | null): string {
   if (!riskLevel) {
@@ -27,26 +24,35 @@ export function getDisplayRiskLabel(riskLevel?: string | null): string {
   if (norm === 'low') {
     return 'below screening cutoff';
   }
-  if (norm === 'high') {
-    return 'well above screening cutoff';
-  }
-  // Any intermediate positive classification:
+  // Both positive tiers read "above screening cutoff"
   return 'above screening cutoff';
 }
 
 /**
- * Honest comparison evaluator per Phase 4 contract:
- * - CI excludes 0 and delta > 0 -> "statistically better"
- * - CI includes 0 -> "not significantly different"
- * - baseline AUC >= deployed AUC -> also adds " (baseline matched or exceeded)"
- * - Never outputs "outperforms" for targets whose CI includes 0.
+ * Returns tier sub-label as separate small text ("upper band" for the highest tier).
+ */
+export function getTierBandLabel(riskLevel?: string | null): string | null {
+  if (!riskLevel) return null;
+  const norm = riskLevel.toLowerCase().trim();
+  if (norm === 'high') {
+    return 'upper band';
+  }
+  return null;
+}
+
+/**
+ * Honest comparison evaluator per Phase 4 / 4.1 contract:
+ * - Uses "statistically better" ONLY if a paired comparison exists and 95% CI excludes 0 with delta > 0.
+ * - If CI includes 0 -> "not significantly different" (+ " (baseline matched or exceeded)" if base >= dep).
+ * - Otherwise neutral wording -> "higher point estimate; confidence intervals overlap".
+ * - Never claims "outperforms".
  */
 export function formatHonestyComparisonText(pb?: PairedBootstrapData | null): string {
-  if (!pb || !pb.ci_95) {
-    return 'Comparison data unavailable';
+  if (!pb || !pb.ci_95 || pb.delta_auc === undefined) {
+    return 'higher point estimate; confidence intervals overlap';
   }
   const [lower, upper] = pb.ci_95;
-  const delta = pb.delta_auc ?? 0;
+  const delta = pb.delta_auc;
   const depAuc = pb.deployed_roc_auc ?? 0;
   const baseAuc = pb.baseline_roc_auc ?? 0;
 

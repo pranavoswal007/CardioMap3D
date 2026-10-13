@@ -64,7 +64,10 @@ export function AboutTab() {
         </p>
 
         {/* Verbatim ATTRIBUTION.txt imported via Vite ?raw */}
-        <div className="bg-slate-950 p-4 rounded-lg border border-slate-800 font-mono text-xs text-slate-300 whitespace-pre-wrap leading-relaxed overflow-x-auto">
+        <div
+          data-testid="heart-attribution-text"
+          className="bg-slate-950 p-4 rounded-lg border border-slate-800 font-mono text-xs text-slate-300 whitespace-pre-wrap leading-relaxed overflow-x-auto"
+        >
           {heartAttributionText}
         </div>
 
