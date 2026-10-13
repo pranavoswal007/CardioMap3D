@@ -1,6 +1,7 @@
-import { AlertTriangle, HeartPulse, Activity } from 'lucide-react';
+import { AlertTriangle, HeartPulse, Activity, ArrowUp, ArrowDown, Minus } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { getDisplayRiskLabel, getTierBandLabel } from '../utils/riskLabels';
+import { formatProbabilityDelta } from '../utils/whatIfMath';
 import type { TargetPrediction } from '../api/types';
 
 interface ProbabilityBarProps {
@@ -82,6 +83,14 @@ export function TargetCard({
   const displayLabel = getDisplayRiskLabel(prediction.risk_level);
   const tierBand = getTierBandLabel(prediction.risk_level);
   const isElevated = prediction.probability >= prediction.threshold;
+  const whatIfActive = useAppStore((s) => s.whatIfActive);
+  const baselinePrediction = useAppStore((s) => s.baselinePrediction);
+
+  const baselineP =
+    id === 'cad'
+      ? baselinePrediction?.cad?.probability
+      : baselinePrediction?.vessels?.[id]?.probability;
+  const delta = formatProbabilityDelta(prediction.probability, baselineP);
 
   return (
     <div
@@ -109,7 +118,18 @@ export function TargetCard({
           <div className="text-lg font-bold text-white tracking-tight">
             {(prediction.probability * 100).toFixed(1)}%
           </div>
-          <div className="flex flex-col items-end gap-0.5">
+          {whatIfActive && baselineP !== undefined && (
+            <div
+              className={`text-[11px] font-semibold font-mono flex items-center justify-end gap-0.5 ${delta.colorClass}`}
+              title="Probability delta vs baseline"
+            >
+              {delta.arrow === 'up' && <ArrowUp className="w-3 h-3" />}
+              {delta.arrow === 'down' && <ArrowDown className="w-3 h-3" />}
+              {delta.arrow === 'neutral' && <Minus className="w-3 h-3" />}
+              <span>{delta.deltaText}</span>
+            </div>
+          )}
+          <div className="flex flex-col items-end gap-0.5 mt-0.5">
             <span
               className={`inline-block px-2 py-0.5 rounded text-[10px] font-medium ${
                 isElevated

@@ -51,6 +51,18 @@ export interface AppState {
   selectedTarget: TargetCode;
   setSelectedTarget: (target: TargetCode) => void;
 
+  // What-If Mode
+  whatIfActive: boolean;
+  setWhatIfActive: (active: boolean) => void;
+  baselineInputs: Record<string, number | string> | null;
+  setBaselineInputs: (inputs: Record<string, number | string> | null) => void;
+  baselinePrediction: PredictResponse | null;
+  setBaselinePrediction: (pred: PredictResponse | null) => void;
+
+  // Heartbeat Animation
+  animateHeartbeat: boolean;
+  setAnimateHeartbeat: (animate: boolean) => void;
+
   // In-flight request controllers
   predictAbortController: AbortController | null;
   setPredictAbortController: (c: AbortController | null) => void;
@@ -121,6 +133,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       explainError: { ...initialExplainError },
       selectedVessel: null,
       selectedTarget: 'cad',
+      whatIfActive: false,
+      baselineInputs: null,
+      baselinePrediction: null,
     });
   },
 
@@ -167,6 +182,27 @@ export const useAppStore = create<AppState>((set, get) => ({
       selectedVessel: target === 'cad' ? null : target,
     });
   },
+
+  whatIfActive: false,
+  setWhatIfActive: (whatIfActive) => {
+    const { prediction, patientInputs, baselinePrediction } = get();
+    if (whatIfActive && !baselinePrediction && prediction) {
+      set({
+        baselineInputs: { ...patientInputs },
+        baselinePrediction: prediction,
+        whatIfActive,
+      });
+    } else {
+      set({ whatIfActive });
+    }
+  },
+  baselineInputs: null,
+  setBaselineInputs: (baselineInputs) => set({ baselineInputs }),
+  baselinePrediction: null,
+  setBaselinePrediction: (baselinePrediction) => set({ baselinePrediction }),
+
+  animateHeartbeat: true,
+  setAnimateHeartbeat: (animateHeartbeat) => set({ animateHeartbeat }),
 
   predictAbortController: null,
   setPredictAbortController: (c) => set({ predictAbortController: c }),

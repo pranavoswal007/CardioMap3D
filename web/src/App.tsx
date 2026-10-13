@@ -8,6 +8,8 @@ import {
   ShieldCheck,
   Info,
   AlertCircle,
+  HeartPulse,
+  Sliders,
 } from 'lucide-react';
 import type { VesselId, VesselData } from './types/viewer';
 import { useAppStore } from './store/useAppStore';
@@ -18,6 +20,12 @@ import { DisclaimerBanner } from './components/DisclaimerBanner';
 
 // Lazy-load the heavy components and 3D viewer for optimal bundle performance
 const HeartViewer = React.lazy(() => import('./components/HeartViewer'));
+const TerritoryMap = React.lazy(() =>
+  import('./components/TerritoryMap').then((m) => ({ default: m.TerritoryMap }))
+);
+const WhatIfPanel = React.lazy(() =>
+  import('./components/WhatIfPanel').then((m) => ({ default: m.WhatIfPanel }))
+);
 const ExplanationPanel = React.lazy(() =>
   import('./components/ExplanationPanel').then((m) => ({ default: m.ExplanationPanel }))
 );
@@ -59,6 +67,28 @@ export function App() {
   const patientInputs = useAppStore((s) => s.patientInputs);
   const selectedVessel = useAppStore((s) => s.selectedVessel);
   const setSelectedVessel = useAppStore((s) => s.setSelectedVessel);
+  const animateHeartbeat = useAppStore((s) => s.animateHeartbeat);
+  const setAnimateHeartbeat = useAppStore((s) => s.setAnimateHeartbeat);
+  const whatIfActive = useAppStore((s) => s.whatIfActive);
+  const setWhatIfActive = useAppStore((s) => s.setWhatIfActive);
+
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  });
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const handler = (e: MediaQueryListEvent) => setPrefersReducedMotion(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+
+  const rawPR =
+    typeof patientInputs['PR'] === 'number'
+      ? patientInputs['PR']
+      : Number(patientInputs['PR'] ?? 70);
+  const clampedBpm = Math.max(40, Math.min(180, isNaN(rawPR) ? 70 : rawPR));
 
   const [apiStatus, setApiStatus] = useState<'checking' | 'online' | 'unreachable'>('checking');
   const [initError, setInitError] = useState<string | null>(null);
@@ -268,36 +298,63 @@ export function App() {
       <main className="flex-1 p-6 max-w-[1800px] w-full mx-auto">
         {activeTab === 'patient' && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {/* Left Column: 3D Visualization Canvas & Explanations (7 cols) */}
+            {/* Left Column: 3D Visualization Canvas, Territory Map & Explanations (7 cols) */}
             <section className="lg:col-span-7 flex flex-col gap-6">
               <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-xl">
-                <div className="flex items-center justify-between mb-3">
+                <div className="flex flex-wrap items-center justify-between gap-3 mb-3 pb-3 border-b border-slate-800">
                   <div className="flex items-center gap-2">
                     <Layers className="w-4 h-4 text-sky-400" />
                     <h2 className="text-sm font-semibold tracking-wide uppercase text-slate-200">
-                      3D Anatomical Risk Projection
+                      3D Anatomical Risk Projection & Territory Map
                     </h2>
                   </div>
-                  <span className="text-xs text-slate-400">
-                    LAD / LCX / RCA vessel color mapping synchronized with prediction results
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={animateHeartbeat && !prefersReducedMotion}
+                      disabled={prefersReducedMotion}
+                      onClick={() => setAnimateHeartbeat(!animateHeartbeat)}
+                      title={
+                        prefersReducedMotion
+                          ? 'Heartbeat animation disabled due to OS reduced motion setting'
+                          : animateHeartbeat
+                          ? 'Disable heartbeat animation'
+                          : 'Animate heartbeat at patient pulse rate'
+                      }
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors border ${
+                        animateHeartbeat && !prefersReducedMotion
+                          ? 'bg-rose-950/60 text-rose-300 border-rose-800/80 shadow-sm'
+                          : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-slate-200'
+                      } ${prefersReducedMotion ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                      <HeartPulse
+                        className={`w-3.5 h-3.5 ${
+                          animateHeartbeat && !prefersReducedMotion ? 'animate-pulse text-rose-400' : ''
+                        }`}
+                      />
+                      <span>Animate heartbeat</span>
+                      <span className="text-[10px] text-slate-400 font-mono">({clampedBpm} bpm)</span>
+                    </button>
+                  </div>
                 </div>
 
-                <div className="min-h-[520px]">
-                  <React.Suspense fallback={<HeartViewerFallback />}>
-                    <HeartViewer
-                      vessels={vesselsProp}
-                      selectedVessel={selectedVessel}
-                      onSelectVessel={setSelectedVessel}
-                      bpm={
-                        typeof patientInputs['Pulse'] === 'number'
-                          ? patientInputs['Pulse']
-                          : typeof patientInputs['Heart Rate'] === 'number'
-                          ? patientInputs['Heart Rate']
-                          : undefined
-                      }
-                    />
-                  </React.Suspense>
+                <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start">
+                  <div className="xl:col-span-7 min-h-[500px]">
+                    <React.Suspense fallback={<HeartViewerFallback />}>
+                      <HeartViewer
+                        vessels={vesselsProp}
+                        selectedVessel={selectedVessel}
+                        onSelectVessel={setSelectedVessel}
+                        bpm={animateHeartbeat && !prefersReducedMotion ? clampedBpm : undefined}
+                      />
+                    </React.Suspense>
+                  </div>
+                  <div className="xl:col-span-5 flex flex-col justify-center">
+                    <React.Suspense fallback={<ComponentFallback label="territory map" />}>
+                      <TerritoryMap vessels={vesselsProp} />
+                    </React.Suspense>
+                  </div>
                 </div>
               </div>
 
@@ -307,10 +364,50 @@ export function App() {
               </React.Suspense>
             </section>
 
-            {/* Right Column: Prediction Cards & Patient Form (5 cols) */}
+            {/* Right Column: Prediction Cards, What-If Simulation & Patient Form (5 cols) */}
             <section className="lg:col-span-5 flex flex-col gap-6">
               <ResultCards />
-              <PatientForm />
+
+              {/* What-If Mode Toggle Banner */}
+              <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-lg flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Sliders className="w-4 h-4 text-indigo-400" />
+                  <div>
+                    <span className="text-xs font-semibold text-white">What-If Sensitivity Simulation</span>
+                    <p className="text-[10px] text-slate-400">
+                      {prediction
+                        ? 'Test hypothetical adjustments to modifiable factors'
+                        : 'Run baseline analysis first to enable What-If simulation'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={whatIfActive}
+                  disabled={!prediction && !whatIfActive}
+                  onClick={() => setWhatIfActive(!whatIfActive)}
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-slate-900 ${
+                    whatIfActive ? 'bg-indigo-600' : 'bg-slate-800'
+                  } ${!prediction && !whatIfActive ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  title={!prediction ? 'Run baseline prediction first' : 'Toggle What-If mode'}
+                >
+                  <span
+                    aria-hidden="true"
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                      whatIfActive ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {whatIfActive ? (
+                <React.Suspense fallback={<ComponentFallback label="what-if exploration" />}>
+                  <WhatIfPanel />
+                </React.Suspense>
+              ) : (
+                <PatientForm />
+              )}
             </section>
           </div>
         )}

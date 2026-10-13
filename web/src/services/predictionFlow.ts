@@ -39,6 +39,10 @@ export async function runPredictionFlow(specificTargets?: TargetCode[]): Promise
   try {
     const predResult = await api.predict(payload, predictController.signal);
     store.setPrediction(predResult);
+    if (!store.whatIfActive) {
+      store.setBaselineInputs({ ...rawInputs });
+      store.setBaselinePrediction(predResult);
+    }
     store.setPredictLoading(false);
   } catch (err: unknown) {
     if (err instanceof DOMException && err.name === 'AbortError') {
