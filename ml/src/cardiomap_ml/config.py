@@ -74,9 +74,7 @@ def assert_no_target_leakage(
         AssertionError: If any target or angiography outcome is present in feature_names.
     """
     normalized_forbidden = {normalize_column_name(t) for t in forbidden_targets}
-    leaked = [
-        f for f in feature_names if normalize_column_name(f) in normalized_forbidden
-    ]
+    leaked = [f for f in feature_names if normalize_column_name(f) in normalized_forbidden]
     if leaked:
         raise AssertionError(
             f"CRITICAL TARGET LEAKAGE DETECTED! Features contain forbidden target columns: {leaked}. "

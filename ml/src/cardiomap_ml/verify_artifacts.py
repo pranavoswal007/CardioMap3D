@@ -63,11 +63,17 @@ def verify_artifacts(
         if len(bg_df) != 30:
             errors.append(f"shap_background_sample.csv has {len(bg_df)} rows, expected 30")
         elif len(bg_df.columns) != 55:
-            errors.append(f"shap_background_sample.csv has {len(bg_df.columns)} columns, expected 55")
+            errors.append(
+                f"shap_background_sample.csv has {len(bg_df.columns)} columns, expected 55"
+            )
         elif list(bg_df.columns) != list(schema.keys()):
-            errors.append("shap_background_sample.csv column names do not match feature_schema.json")
+            errors.append(
+                "shap_background_sample.csv column names do not match feature_schema.json"
+            )
         else:
-            logger.info("✓ shap_background_sample.csv is stratified 30-patient sample across 55 features")
+            logger.info(
+                "✓ shap_background_sample.csv is stratified 30-patient sample across 55 features"
+            )
 
     # 3. Check thresholds.json and metrics.json
     thresh_path = artifacts_dir / "thresholds.json"
@@ -103,37 +109,55 @@ def verify_artifacts(
             if not isinstance(clf, exp_type):
                 errors.append(f"{joblib_path} classifier is {type(clf)}, expected {exp_type}")
             if target == "y_rca" and isinstance(clf, LGBMClassifier) and clf.max_depth != 2:
-                errors.append(f"{joblib_path} y_rca max_depth={clf.max_depth}, expected 2 (LGBM_Shallow)")
+                errors.append(
+                    f"{joblib_path} y_rca max_depth={clf.max_depth}, expected 2 (LGBM_Shallow)"
+                )
 
         # Check metrics.json deployed model matches
         target_metrics = metrics.get("targets", {}).get(target, {})
         sel_model = target_metrics.get("selected_model")
         if sel_model != exp_name:
-            errors.append(f"metrics.json targets[{target}].selected_model={sel_model}, expected {exp_name}")
+            errors.append(
+                f"metrics.json targets[{target}].selected_model={sel_model}, expected {exp_name}"
+            )
 
         # Check threshold agreement
         sel_t_thresh = thresholds.get(target, {}).get("selected_threshold")
         sel_t_metric = target_metrics.get("thresholds", {}).get("selected_threshold")
         if sel_t_thresh is None or sel_t_metric is None or sel_t_thresh != sel_t_metric:
-            errors.append(f"Threshold mismatch for {target}: thresholds.json={sel_t_thresh} vs metrics.json={sel_t_metric}")
+            errors.append(
+                f"Threshold mismatch for {target}: thresholds.json={sel_t_thresh} vs metrics.json={sel_t_metric}"
+            )
 
         # Check baseline_comparison_table cutoff agreement
         base_table = metrics.get("baseline_comparison_table", {})
         if target in base_table:
             cutoff = base_table[target].get("operating_cutoff")
             if cutoff != sel_t_thresh:
-                errors.append(f"baseline_comparison_table cutoff mismatch for {target}: {cutoff} != {sel_t_thresh}")
+                errors.append(
+                    f"baseline_comparison_table cutoff mismatch for {target}: {cutoff} != {sel_t_thresh}"
+                )
 
-        logger.info("✓ Target %s: model=%s, threshold=%.4f verified across joblib, thresholds, metrics", target, exp_name, sel_t_thresh)
+        logger.info(
+            "✓ Target %s: model=%s, threshold=%.4f verified across joblib, thresholds, metrics",
+            target,
+            exp_name,
+            sel_t_thresh,
+        )
 
     # 5. Check model version consistency
     model_card = docs_dir / "model_card.md"
     if model_card.exists():
         card_text = model_card.read_text(encoding="utf-8")
         if f"Model Version**: `{MODEL_VERSION}`" not in card_text:
-            errors.append(f"docs/model_card.md does not mention canonical Model Version `{MODEL_VERSION}`")
+            errors.append(
+                f"docs/model_card.md does not mention canonical Model Version `{MODEL_VERSION}`"
+            )
         else:
-            logger.info("✓ Model version `%s` verified in docs/model_card.md and api/config.py", MODEL_VERSION)
+            logger.info(
+                "✓ Model version `%s` verified in docs/model_card.md and api/app/config.py",
+                MODEL_VERSION,
+            )
 
     if errors:
         logger.error("Artifact verification FAILED with %d error(s):", len(errors))

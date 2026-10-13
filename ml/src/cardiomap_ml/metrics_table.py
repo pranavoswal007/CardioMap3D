@@ -47,29 +47,97 @@ def compute_baseline_table(
         metrics = json.load(f)
 
     factories: dict[str, Any] = {
-        "SoftVotingEnsemble": lambda: Pipeline([
-            ("prep", create_preprocessor(list(X.columns))),
-            ("clf", VotingClassifier(
-                estimators=[
-                    ("lr", LogisticRegression(max_iter=1000, random_state=RANDOM_SEED, class_weight="balanced")),
-                    ("rf", RandomForestClassifier(n_estimators=100, max_depth=6, random_state=RANDOM_SEED, class_weight="balanced", n_jobs=2)),
-                    ("xgb", XGBClassifier(n_estimators=100, max_depth=4, learning_rate=0.05, random_state=RANDOM_SEED, eval_metric="logloss", n_jobs=2)),
-                ],
-                voting="soft",
-            )),
-        ]),
-        "RandomForest": lambda: Pipeline([
-            ("prep", create_preprocessor(list(X.columns))),
-            ("clf", RandomForestClassifier(n_estimators=100, max_depth=6, random_state=RANDOM_SEED, class_weight="balanced", n_jobs=2)),
-        ]),
-        "LightGBM": lambda: Pipeline([
-            ("prep", create_preprocessor(list(X.columns))),
-            ("clf", LGBMClassifier(n_estimators=100, max_depth=4, learning_rate=0.05, random_state=RANDOM_SEED, verbose=-1, n_jobs=2)),
-        ]),
-        "LGBM_Shallow": lambda: Pipeline([
-            ("prep", create_preprocessor(list(X.columns))),
-            ("clf", LGBMClassifier(n_estimators=100, max_depth=2, num_leaves=3, min_child_samples=20, learning_rate=0.03, reg_alpha=1.0, reg_lambda=2.0, verbose=-1, random_state=RANDOM_SEED, n_jobs=2)),
-        ]),
+        "SoftVotingEnsemble": lambda: Pipeline(
+            [
+                ("prep", create_preprocessor(list(X.columns))),
+                (
+                    "clf",
+                    VotingClassifier(
+                        estimators=[
+                            (
+                                "lr",
+                                LogisticRegression(
+                                    max_iter=1000, random_state=RANDOM_SEED, class_weight="balanced"
+                                ),
+                            ),
+                            (
+                                "rf",
+                                RandomForestClassifier(
+                                    n_estimators=100,
+                                    max_depth=6,
+                                    random_state=RANDOM_SEED,
+                                    class_weight="balanced",
+                                    n_jobs=2,
+                                ),
+                            ),
+                            (
+                                "xgb",
+                                XGBClassifier(
+                                    n_estimators=100,
+                                    max_depth=4,
+                                    learning_rate=0.05,
+                                    random_state=RANDOM_SEED,
+                                    eval_metric="logloss",
+                                    n_jobs=2,
+                                ),
+                            ),
+                        ],
+                        voting="soft",
+                    ),
+                ),
+            ]
+        ),
+        "RandomForest": lambda: Pipeline(
+            [
+                ("prep", create_preprocessor(list(X.columns))),
+                (
+                    "clf",
+                    RandomForestClassifier(
+                        n_estimators=100,
+                        max_depth=6,
+                        random_state=RANDOM_SEED,
+                        class_weight="balanced",
+                        n_jobs=2,
+                    ),
+                ),
+            ]
+        ),
+        "LightGBM": lambda: Pipeline(
+            [
+                ("prep", create_preprocessor(list(X.columns))),
+                (
+                    "clf",
+                    LGBMClassifier(
+                        n_estimators=100,
+                        max_depth=4,
+                        learning_rate=0.05,
+                        random_state=RANDOM_SEED,
+                        verbose=-1,
+                        n_jobs=2,
+                    ),
+                ),
+            ]
+        ),
+        "LGBM_Shallow": lambda: Pipeline(
+            [
+                ("prep", create_preprocessor(list(X.columns))),
+                (
+                    "clf",
+                    LGBMClassifier(
+                        n_estimators=100,
+                        max_depth=2,
+                        num_leaves=3,
+                        min_child_samples=20,
+                        learning_rate=0.03,
+                        reg_alpha=1.0,
+                        reg_lambda=2.0,
+                        verbose=-1,
+                        random_state=RANDOM_SEED,
+                        n_jobs=2,
+                    ),
+                ),
+            ]
+        ),
     }
 
     baseline_table: dict[str, Any] = {}
@@ -131,13 +199,18 @@ def compute_baseline_table(
             "sensitivity_at_cutoff": round(sens_t, 4),
             "specificity_at_cutoff": round(spec_t, 4),
             "roc_auc": round(float(roc_info["point_estimate"]), 4),
-            "roc_auc_ci_95": [round(float(roc_info["ci_95"][0]), 4), round(float(roc_info["ci_95"][1]), 4)],
+            "roc_auc_ci_95": [
+                round(float(roc_info["ci_95"][0]), 4),
+                round(float(roc_info["ci_95"][1]), 4),
+            ],
         }
 
     return baseline_table
 
 
-def update_metrics_json(baseline_table: dict[str, Any], artifacts_dir: Path = Path("artifacts")) -> None:
+def update_metrics_json(
+    baseline_table: dict[str, Any], artifacts_dir: Path = Path("artifacts")
+) -> None:
     """Save baseline comparison table into artifacts/metrics.json."""
     metrics_path = artifacts_dir / "metrics.json"
     with open(metrics_path, encoding="utf-8") as f:
@@ -166,7 +239,9 @@ def generate_markdown_table_model_card(table: dict[str, Any]) -> str:
         gain = f"**+{row['f1_gain_over_trivial']:.4f}**"
         bal_acc = f"{row['balanced_accuracy_at_cutoff']:.4f}"
         auc_str = f"**{row['roc_auc']:.4f}** [{row['roc_auc_ci_95'][0]:.4f}, {row['roc_auc_ci_95'][1]:.4f}]"
-        lines.append(f"| **`{target}`** | {prev_str} | {triv_f1} | {f1_50} | {cutoff} | {f1_cut} | {gain} | {bal_acc} | {auc_str} |")
+        lines.append(
+            f"| **`{target}`** | {prev_str} | {triv_f1} | {f1_50} | {cutoff} | {f1_cut} | {gain} | {bal_acc} | {auc_str} |"
+        )
     return "\n".join(lines)
 
 
@@ -185,7 +260,9 @@ def generate_markdown_table_eval_report(table: dict[str, Any]) -> str:
         f1_cut = f"**{row['f1_at_operating_cutoff']:.4f}**"
         gain = f"**+{row['f1_gain_over_trivial']:.4f}**"
         bal_acc = f"{row['balanced_accuracy_at_cutoff']:.4f}"
-        lines.append(f"| **`{target}`** | {prev_str} | {triv_f1} | {f1_50} | {cutoff} | {f1_cut} | {gain} | {bal_acc} |")
+        lines.append(
+            f"| **`{target}`** | {prev_str} | {triv_f1} | {f1_50} | {cutoff} | {f1_cut} | {gain} | {bal_acc} |"
+        )
     return "\n".join(lines)
 
 

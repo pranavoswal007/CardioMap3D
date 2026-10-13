@@ -7,6 +7,7 @@ import json
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any, cast
 
 import joblib
@@ -36,6 +37,41 @@ from .schemas import (
 
 logger = logging.getLogger(__name__)
 
+
+def compute_artifact_hash(artifacts_dir: Path) -> str:
+    """Compute SHA256 fingerprint over deployed model artifacts and configuration."""
+    h = hashlib.sha256()
+    for fname in sorted(
+        [
+            "model_y_cad.joblib",
+            "model_y_lad.joblib",
+            "model_y_lcx.joblib",
+            "model_y_rca.joblib",
+            "thresholds.json",
+            "feature_schema.json",
+        ]
+    ):
+        fpath = artifacts_dir / fname
+        if fpath.exists():
+            h.update(fname.encode("utf-8"))
+            h.update(fpath.read_bytes())
+    return h.hexdigest()[:16]
+
+
+def build_stability_note(stability_data: dict[str, Any] | None) -> str:
+    """Dynamically construct stability note from shap_stability.json provenance without hardcoded numbers."""
+    prov = stability_data.get("provenance", {}) if stability_data else {}
+    refits = prov.get("bootstrap_refits", 20)
+    top_k = prov.get("top_k", 10)
+    explainer_types = prov.get("explainer_types", "native tree and linear explainers")
+    return (
+        f"Global feature stability evaluated across B={refits} bootstrap refits "
+        f"tracking top-{top_k} feature persistence using {explainer_types}. "
+        f"Local patient explanations are computed on the deployed calibrated pipeline "
+        f"using stratified KernelExplainer in probability points."
+    )
+
+
 # In-memory artifact state loaded once at startup
 STATE: dict[str, Any] = {
     "artifacts_ready": False,
@@ -48,9 +84,11 @@ STATE: dict[str, Any] = {
     "explainers": {},
     "sample_patients": [],
     "explain_cache": {},
+    "target_explain_cache": {},
     "predict_cache": {},
     "cache_hits": 0,
     "cache_misses": 0,
+    "artifact_hash": "unknown",
 }
 
 TARGET_KEYS = ["cad", "lad", "lcx", "rca"]
@@ -184,7 +222,11 @@ def load_all_artifacts() -> None:
         if raw_data_path.exists() and "cad" in STATE["models"]:
             df_raw = pd.read_excel(raw_data_path, sheet_name="Sheet 1 - Table 1")
             X_raw = df_raw.drop(columns=["Cath", "LAD", "LCX", "RCA"])
-            probs = np.clip(STATE["models"]["cad"].predict_proba(X_raw)[:, 1], settings.clip_min, settings.clip_max)
+            probs = np.clip(
+                STATE["models"]["cad"].predict_proba(X_raw)[:, 1],
+                settings.clip_min,
+                settings.clip_max,
+            )
 
             low_idx = np.where(probs < 0.35)[0]
             mod_idx = np.where((probs >= 0.45) & (probs <= 0.65))[0]
@@ -192,24 +234,34 @@ def load_all_artifacts() -> None:
 
             samples = []
             selected_indices = [
-                int(low_idx[0]), int(low_idx[1]),
-                int(mod_idx[0]), int(mod_idx[1]),
-                int(high_idx[0]), int(high_idx[1]),
+                int(low_idx[0]),
+                int(low_idx[1]),
+                int(mod_idx[0]),
+                int(mod_idx[1]),
+                int(high_idx[0]),
+                int(high_idx[1]),
             ]
             for idx in selected_indices:
                 p_val = float(probs[idx])
                 tier = "low" if p_val < 0.35 else ("moderate" if p_val <= 0.65 else "high")
-                samples.append(SamplePatient(
-                    sample_id=f"sample_patient_{idx}",
-                    dataset_row_index=idx,
-                    cad_probability=round(p_val, 4),
-                    risk_tier=tier,
-                    features={k: to_python_primitive(v) for k, v in X_raw.iloc[idx].to_dict().items()},
-                ))
+                samples.append(
+                    SamplePatient(
+                        sample_id=f"sample_patient_{idx}",
+                        dataset_row_index=idx,
+                        cad_probability=round(p_val, 4),
+                        risk_tier=tier,
+                        features={
+                            k: to_python_primitive(v) for k, v in X_raw.iloc[idx].to_dict().items()
+                        },
+                    )
+                )
             STATE["sample_patients"] = samples
 
+        STATE["artifact_hash"] = compute_artifact_hash(artifacts_dir)
         STATE["artifacts_ready"] = True
-        logger.info("All ML artifacts loaded successfully.")
+        logger.info(
+            "All ML artifacts loaded successfully (artifact_hash=%s).", STATE["artifact_hash"]
+        )
 
     except (FileNotFoundError, KeyError, ValueError, RuntimeError) as e:
         logger.error("Failed to load ML artifacts: %s", e)
@@ -228,7 +280,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(
     title=settings.app_name,
-    version=settings.model_version,
+    version=settings.api_version,
     description=settings.disclaimer,
     lifespan=lifespan,
 )
@@ -263,7 +315,9 @@ def health_check() -> HealthResponse:
     return HealthResponse(
         status="ok",
         app_name=settings.app_name,
+        api_version=settings.api_version,
         model_version=settings.model_version,
+        artifact_hash=str(STATE.get("artifact_hash", "unknown")),
         artifacts_ready=STATE["artifacts_ready"],
         disclaimer=settings.disclaimer,
     )
@@ -282,7 +336,9 @@ def get_schema() -> SchemaResponse:
     for short_name, t_code in TARGET_MAP.items():
         t_data = thresholds_dict.get(t_code, {})
         sel_t = float(t_data.get("selected_threshold", 0.5))
-        prev = float(metrics_dict.get("targets", {}).get(t_code, {}).get("prevalence", {}).get("rate", 0.5))
+        prev = float(
+            metrics_dict.get("targets", {}).get(t_code, {}).get("prevalence", {}).get("rate", 0.5)
+        )
         risk_cutoffs[short_name] = CutoffThreshold(
             operating_threshold=round(sel_t, 4),
             threshold=round(sel_t, 4),
@@ -293,13 +349,19 @@ def get_schema() -> SchemaResponse:
         )
 
     return SchemaResponse(
+        api_version=settings.api_version,
+        model_version=settings.model_version,
+        artifact_hash=str(STATE.get("artifact_hash", "unknown")),
+        disclaimer=settings.disclaimer,
         feature_schema=STATE["feature_schema"],
         risk_cutoffs=risk_cutoffs,
         margin=settings.risk_level_margin,
     )
 
 
-def validate_and_prepare_input(patient_data: dict[str, Any]) -> tuple[pd.DataFrame, list[str], list[str]]:
+def validate_and_prepare_input(
+    patient_data: dict[str, Any],
+) -> tuple[pd.DataFrame, list[str], list[str]]:
     """Validate patient features, reject forbidden/unknown fields, impute defaults, and flag out-of-range inputs."""
     schema = STATE["feature_schema"]
     allowed_features = set(schema.keys())
@@ -336,9 +398,13 @@ def validate_and_prepare_input(patient_data: dict[str, Any]) -> tuple[pd.DataFra
                 f_min = finfo.get("min")
                 f_max = finfo.get("max")
                 if f_min is not None and norm_v < f_min:
-                    warnings.append(f"Feature '{fname}' value {norm_v} is below observed cohort minimum {f_min}.")
+                    warnings.append(
+                        f"Feature '{fname}' value {norm_v} is below observed cohort minimum {f_min}."
+                    )
                 elif f_max is not None and norm_v > f_max:
-                    warnings.append(f"Feature '{fname}' value {norm_v} is above observed cohort maximum {f_max}.")
+                    warnings.append(
+                        f"Feature '{fname}' value {norm_v} is above observed cohort maximum {f_max}."
+                    )
         else:
             default_v = finfo.get("default")
             prepared_row[fname] = default_v
@@ -431,12 +497,13 @@ def predict_stenosis_risk(patient_features: dict[str, Any]) -> PredictResponse:
     }
 
     response = PredictResponse(
+        api_version=settings.api_version,
+        model_version=settings.model_version,
         cad=cad_pred,
         vessels=vessel_preds,
         coherence=coherence_info,
         imputed_features=imputed_fields,
         warnings=warnings,
-        model_version=settings.model_version,
         disclaimer=settings.disclaimer,
     )
     if len(STATE["predict_cache"]) >= 500:
@@ -449,47 +516,39 @@ def predict_stenosis_risk(patient_features: dict[str, Any]) -> PredictResponse:
 def explain_stenosis_prediction(
     patient_features: dict[str, Any],
     top_n: int = 10,
-    targets: str | None = Query(default=None, description="Comma-separated subset of targets (cad, lad, lcx, rca)"),
+    targets: str | None = Query(
+        default=None, description="Comma-separated subset of targets (allowed: cad, lad, lcx, rca)"
+    ),
 ) -> ExplainResponse:
     """Compute local SHAP feature attributions in raw score and normalized relative contribution %."""
     if not STATE["artifacts_ready"]:
         raise HTTPException(status_code=503, detail="Model artifacts not ready.")
 
-    # Validate and parse targets query parameter
-    if targets is not None and targets.strip():
-        raw_list = [t.strip().lower() for t in targets.split(",") if t.strip()]
-        if not raw_list:
-            raise HTTPException(status_code=422, detail="Query parameter 'targets' cannot be empty when provided.")
-        invalid_targets = [t for t in raw_list if t not in TARGET_KEYS]
-        if invalid_targets:
+    allowed_targets = ["cad", "lad", "lcx", "rca"]
+    if targets is None:
+        requested_targets = allowed_targets
+    else:
+        raw_list = [t.strip().lower() for t in targets.split(",")]
+        if not raw_list or any(t == "" for t in raw_list):
             raise HTTPException(
                 status_code=422,
-                detail=f"Unknown target(s) requested: {invalid_targets}. Allowed targets: {TARGET_KEYS}",
+                detail="Empty target specified. Allowed targets are: cad, lad, lcx, rca",
             )
-        active_targets = raw_list
-    else:
-        active_targets = list(TARGET_KEYS)
-
-    # Input hash cache check (cache key includes requested targets and top_n)
-    norm_dict = {k: to_python_primitive(v) for k, v in sorted(patient_features.items())}
-    cache_payload = {
-        "features": norm_dict,
-        "targets": sorted(active_targets),
-        "top_n": top_n,
-    }
-    cache_key = hashlib.sha256(json.dumps(cache_payload, sort_keys=True).encode("utf-8")).hexdigest()
-    if cache_key in STATE["explain_cache"]:
-        STATE["cache_hits"] += 1
-        return cast(ExplainResponse, STATE["explain_cache"][cache_key])
-    STATE["cache_misses"] += 1
+        unknown = [t for t in raw_list if t not in allowed_targets]
+        if unknown:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Invalid target(s): {', '.join(sorted(set(unknown)))}. Allowed targets are: cad, lad, lcx, rca",
+            )
+        deduped = set(raw_list)
+        requested_targets = [t for t in allowed_targets if t in deduped]
 
     df_patient, _, _ = validate_and_prepare_input(patient_features)
     schema = STATE["feature_schema"]
 
-    target_explanations = {}
-    physiology_items = []
+    norm_dict = {k: to_python_primitive(v) for k, v in sorted(patient_features.items())}
+    patient_hash = hashlib.sha256(json.dumps(norm_dict, sort_keys=True).encode("utf-8")).hexdigest()
 
-    # Physiological key measurement features to track for CAD
     PHYSIOLOGY_FEATURES = {
         "Age": "Demographics",
         "Typical Chest Pain": "Symptoms",
@@ -503,87 +562,120 @@ def explain_stenosis_prediction(
         "ESR": "Inflammatory Biomarkers",
     }
 
-    for short_name in active_targets:
-        if short_name not in STATE["explainers"]:
-            continue
-        (explainer, raw_unit) = STATE["explainers"][short_name]
-        t_code = TARGET_MAP[short_name]
-        feature_names = list(df_patient.columns)
+    target_explanations: dict[str, TargetExplanation] = {}
+    target_raw_map: dict[str, dict[str, Any]] = {}
 
-        # Fixed seed guarantees deterministic attributions on repeated calls
-        np.random.seed(42)
-        try:
-            sv = explainer.shap_values(df_patient, nsamples=150, silent=True)
-            if isinstance(sv, list):
-                vals = sv[0]
-            else:
-                vals = sv[0] if len(sv.shape) == 2 else sv
-            base_v = float(explainer.expected_value)
-        except (ValueError, TypeError, RuntimeError) as e:
-            logger.warning("SHAP calculation fallback for %s: %s", short_name, e)
-            vals = np.zeros(len(feature_names))
-            base_v = 0.5
+    for short_name in requested_targets:
+        cache_key = (patient_hash, short_name)
+        if cache_key in STATE["target_explain_cache"]:
+            STATE["cache_hits"] += 1
+            raw_data = STATE["target_explain_cache"][cache_key]
+        else:
+            STATE["cache_misses"] += 1
+            if short_name not in STATE["explainers"]:
+                continue
+            (explainer, raw_unit) = STATE["explainers"][short_name]
+            t_code = TARGET_MAP[short_name]
+            feature_names = list(df_patient.columns)
 
-        # Compute normalized signed relative contribution %: signed |shap_i| / sum|shap|
-        abs_vals = np.abs(vals)
-        sum_abs = float(np.sum(abs_vals))
-        if sum_abs < 1e-9:
-            sum_abs = 1.0
+            # Re-seed RNG per target for bit-for-bit determinism across all subsets
+            np.random.seed(42)
+            try:
+                sv = explainer.shap_values(df_patient, nsamples=150, silent=True)
+                if isinstance(sv, list):
+                    vals = sv[0]
+                else:
+                    vals = sv[0] if len(sv.shape) == 2 else sv
+                base_v = float(explainer.expected_value)
+            except (ValueError, TypeError, RuntimeError) as e:
+                logger.warning("SHAP calculation fallback for %s: %s", short_name, e)
+                vals = np.zeros(len(feature_names))
+                base_v = 0.5
 
-        rel_pcts = (vals / sum_abs) * 100.0
+            abs_vals = np.abs(vals)
+            sum_abs = float(np.sum(abs_vals))
+            if sum_abs < 1e-9:
+                sum_abs = 1.0
 
-        # Sort features by absolute contribution
-        sorted_indices = np.argsort(abs_vals)[::-1]
-        contributions = []
+            rel_pcts = (vals / sum_abs) * 100.0
+            stability_info = STATE.get("shap_stability", {}).get(t_code, {})
 
-        stability_info = STATE.get("shap_stability", {}).get(t_code, {})
+            all_contribs = []
+            for i, fname in enumerate(feature_names):
+                disp_label = schema.get(fname, {}).get("display_label", fname)
+                pat_v = to_python_primitive(df_patient[fname].iloc[0])
+                val_shap = float(vals[i])
+                val_pct = float(rel_pcts[i])
+                direction = "increases_risk" if val_shap > 0 else "decreases_risk"
+                f_stab = stability_info.get(fname, {}).get("label", "moderate")
+                all_contribs.append(
+                    {
+                        "feature": fname,
+                        "display_label": disp_label,
+                        "patient_value": pat_v,
+                        "shap_value": round(val_shap, 5),
+                        "relative_contribution_pct": round(val_pct, 2),
+                        "direction": direction,
+                        "stability_label": f_stab,
+                        "abs_val": float(abs_vals[i]),
+                    }
+                )
 
-        for rank_idx, f_idx in enumerate(sorted_indices[:top_n], 1):
-            fname = feature_names[f_idx]
-            disp_label = schema.get(fname, {}).get("display_label", fname)
-            pat_v = to_python_primitive(df_patient[fname].iloc[0])
+            raw_data = {
+                "base_value": base_v,
+                "all_contributions": all_contribs,
+                "raw_unit": raw_unit,
+            }
+            if len(STATE["target_explain_cache"]) >= 2000:
+                STATE["target_explain_cache"].pop(next(iter(STATE["target_explain_cache"])))
+            STATE["target_explain_cache"][cache_key] = raw_data
 
-            val_shap = float(vals[f_idx])
-            val_pct = float(rel_pcts[f_idx])
-            direction = "increases_risk" if val_shap > 0 else "decreases_risk"
+        target_raw_map[short_name] = raw_data
 
-            f_stab = stability_info.get(fname, {}).get("label", "moderate")
-
-            contributions.append(FeatureExplanation(
-                feature=fname,
-                display_label=disp_label,
-                patient_value=pat_v,
-                shap_value=round(val_shap, 5),
-                relative_contribution_pct=round(val_pct, 2),
-                direction=direction,
-                stability_label=f_stab,
-            ))
-
+        # Sort and select top_n features AFTER cache retrieval
+        sorted_contribs = sorted(
+            raw_data["all_contributions"], key=lambda c: c["abs_val"], reverse=True
+        )
+        top_contribs = [
+            FeatureExplanation(
+                feature=c["feature"],
+                display_label=c["display_label"],
+                patient_value=c["patient_value"],
+                shap_value=c["shap_value"],
+                relative_contribution_pct=c["relative_contribution_pct"],
+                direction=c["direction"],
+                stability_label=c["stability_label"],
+            )
+            for c in sorted_contribs[:top_n]
+        ]
         target_explanations[short_name] = TargetExplanation(
             target=short_name,
-            raw_unit=raw_unit,
-            base_value=round(base_v, 5),
-            contributions=contributions,
+            raw_unit=raw_data["raw_unit"],
+            base_value=round(raw_data["base_value"], 5),
+            contributions=top_contribs,
         )
 
-        # Extract CAD physiology contributions for key clinical indicators (only when CAD is requested)
-        if short_name == "cad":
-            for phys_feat, cat in PHYSIOLOGY_FEATURES.items():
-                if phys_feat in feature_names:
-                    idx_p = feature_names.index(phys_feat)
-                    val_s = float(vals[idx_p])
-                    val_p = float(rel_pcts[idx_p])
-                    direction_p = "increases_risk" if val_s > 0 else "decreases_risk"
-                    f_stab_p = stability_info.get(phys_feat, {}).get("label", "stable")
-                    physiology_items.append(PhysiologyItem(
+    # Physiology items are included ONLY when cad is in requested_targets, else null
+    physiology_items: list[PhysiologyItem] | None = None
+    if "cad" in requested_targets and "cad" in target_raw_map:
+        cad_raw = target_raw_map["cad"]
+        contrib_map = {c["feature"]: c for c in cad_raw["all_contributions"]}
+        phys_list = []
+        for phys_feat, cat in PHYSIOLOGY_FEATURES.items():
+            if phys_feat in contrib_map:
+                c = contrib_map[phys_feat]
+                phys_list.append(
+                    PhysiologyItem(
                         feature=phys_feat,
-                        display_label=schema.get(phys_feat, {}).get("display_label", phys_feat),
+                        display_label=c["display_label"],
                         category=cat,
-                        patient_value=to_python_primitive(df_patient[phys_feat].iloc[0]),
-                        relative_contribution_pct=round(val_p, 2),
-                        direction=direction_p,
-                        stability_label=f_stab_p,
-                    ))
+                        patient_value=c["patient_value"],
+                        relative_contribution_pct=c["relative_contribution_pct"],
+                        direction=c["direction"],
+                        stability_label=c["stability_label"],
+                    )
+                )
+        physiology_items = phys_list
 
     bg_size = len(STATE["shap_background"]) if STATE.get("shap_background") is not None else 30
     explainer_metadata = ExplainerMetadata(
@@ -592,17 +684,15 @@ def explain_stenosis_prediction(
         nsamples=150,
         unit="probability points",
         note="Attributions are estimated, describe the displayed calibrated probability, and are not causes.",
-        stability_note=(
-            "Stability labels show how consistently a feature ranks in the top 10 across 20 "
-            "bootstrap refits of the native tree/linear explainers. They are a proxy and "
-            "come from a different explainer than the displayed attributions."
-        ),
+        stability_note=build_stability_note(STATE.get("shap_stability")),
     )
 
-    response = ExplainResponse(
+    return ExplainResponse(
         targets=target_explanations,
-        physiology=physiology_items if "cad" in active_targets else [],
+        requested_targets=requested_targets,
+        physiology=physiology_items,
         explainer=explainer_metadata,
+        api_version=settings.api_version,
         model_version=settings.model_version,
         interpretation_note=(
             "Explanations describe the displayed calibrated probability in probability points "
@@ -610,10 +700,6 @@ def explain_stenosis_prediction(
         ),
         disclaimer=settings.disclaimer,
     )
-    if len(STATE["explain_cache"]) >= 500:
-        STATE["explain_cache"].pop(next(iter(STATE["explain_cache"])))
-    STATE["explain_cache"][cache_key] = response
-    return response
 
 
 @app.get("/metrics", response_model=MetricsResponse)

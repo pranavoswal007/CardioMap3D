@@ -14,6 +14,17 @@
 - **License**: Creative Commons Attribution 4.0 International ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/))
 - **Terms**: This license permits redistribution, adaptation, and commercial use with appropriate attribution to the authors and source.
 
+## Acquisition & Independent Download
+The raw dataset is tracked directly in Git at `data/raw/z_alizadeh_sani_extension.xlsx`.
+If acquiring or refreshing the dataset independently from the official UCI repository:
+```bash
+# 1. Download official archive from UCI Repository (DOI: 10.24432/C5461K)
+curl -L -o /tmp/z_sani_dataset.zip "https://archive.ics.uci.edu/static/public/411/extension+of+z+alizadeh+sani+dataset.zip"
+
+# 2. Extract primary spreadsheet to data/raw/
+unzip -p /tmp/z_sani_dataset.zip "Z-Alizadeh Sani dataset.xlsx" > data/raw/z_alizadeh_sani_extension.xlsx
+```
+
 ## Description
 The dataset contains records of **303 patients** evaluated for coronary artery disease (CAD). It captures comprehensive clinical profiles divided across key diagnostic categories:
 - **Demographic Information**: Age, sex, BMI, weight, length.

@@ -74,9 +74,9 @@ In clinical datasets with non-uniform class distribution, evaluating models agai
 A critical clinical finding is that the optimal operating threshold for `y_lcx` ($t = 0.3973$) is almost identical to cohort prevalence ($39.27\%$), and the operating threshold for `y_rca` ($t = 0.3354$) is strictly below cohort prevalence ($37.62\%$).
 * **Why default 0.50 fails on LCX and RCA**: Because both LCX and RCA exhibit negative-class majority (prevalences ~38–39%), standard $0.50$ decision boundaries incur severe false negative rates, resulting in poor default $F_1$ scores (0.4674 and 0.4773), which are lower than the trivial "flag everyone" baseline.
 * **Sensitivity-Optimized Cutoffs**: In pre-catheterization screening, missed stenoses (false negatives) are clinically hazardous. Tuning thresholds to maximize Youden's $J$ and screening $F_1$ lowers the decision threshold to $0.3973$ (LCX) and $0.3354$ (RCA), boosting sensitivity and lifting $F_1$ to $0.6491$ and $0.6341$, outperforming the trivial baseline.
-* **Clinical Nuance of the "Moderate Risk" Label**:
-  Under CardioMap 3D's strict risk mapping rules, a patient with $p \ge t$ receives a "Moderate" or "High" risk tier. Because $t_{\text{RCA}} = 0.3354$ and $t_{\text{LCX}} = 0.3973$, a patient categorized as "moderate risk" for RCA or LCX may have a calibrated probability near or slightly below the average cohort prevalence.
-  **Clinical Interpretation**: The "Moderate Risk" label indicates that the patient's score exceeds the sensitivity-optimized screening threshold for further diagnostic workup, **not** that their risk is higher than the average referred patient in the registry.
+* **Clinical Nuance of the "Moderate" Risk Tier**:
+  Under CardioMap 3D's strict risk mapping rules, a patient with $p \ge t$ receives a "Moderate" or "High" risk tier. Because $t_{\text{RCA}} = 0.3354$ and $t_{\text{LCX}} = 0.3973$, a patient categorized into the "moderate" tier for RCA or LCX may have a calibrated probability near or slightly below the average cohort prevalence.
+  **Clinical Interpretation**: The "Moderate" tier classification indicates that the patient's score exceeds the sensitivity-optimized screening threshold for further diagnostic workup, **not** that their risk is higher than the average referred patient in the registry.
 
 ---
 
@@ -85,7 +85,7 @@ A critical clinical finding is that the optimal operating threshold for `y_lcx` 
 ### A. Strict Risk Level Mapping
 To guarantee that qualitative risk categories never contradict binary prediction labels, the risk tier is determined strictly from each target's validated operating threshold $t$:
 * **Low Risk**: $p < t$ (Prediction Label: `0 / Low Risk`)
-* **Moderate Risk**: $t \le p < t + 0.15$ (Prediction Label: `1 / Elevated Risk`)
+* **Moderate Tier**: $t \le p < t + 0.15$ (Prediction Label: `1 / Elevated Risk`)
 * **High Risk**: $p \ge t + 0.15$ (Prediction Label: `1 / Elevated Risk`)
 
 ### B. Probability Safety Clipping

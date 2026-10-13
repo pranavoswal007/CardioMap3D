@@ -46,14 +46,18 @@ def raw_data() -> tuple[pd.DataFrame, pd.DataFrame, dict[str, int]]:
     return X, y_df, consistency
 
 
-def test_hard_invariant_exactly_55_features(raw_data: tuple[pd.DataFrame, pd.DataFrame, dict[str, int]]) -> None:
+def test_hard_invariant_exactly_55_features(
+    raw_data: tuple[pd.DataFrame, pd.DataFrame, dict[str, int]],
+) -> None:
     """Verify HARD INVARIANT: X has exactly 55 columns with 0 target leakage."""
     X, _, _ = raw_data
     assert len(X.columns) == 55, f"Expected exactly 55 columns, got {len(X.columns)}"
     assert_no_target_leakage(X.columns)
 
 
-def test_target_consistency_invariants(raw_data: tuple[pd.DataFrame, pd.DataFrame, dict[str, int]]) -> None:
+def test_target_consistency_invariants(
+    raw_data: tuple[pd.DataFrame, pd.DataFrame, dict[str, int]],
+) -> None:
     """Verify target encodings and identify the single documented clinical registry discrepancy."""
     _, y_df, _ = raw_data
     assert len(y_df) == 303
@@ -68,7 +72,9 @@ def test_target_consistency_invariants(raw_data: tuple[pd.DataFrame, pd.DataFram
     assert discrepancy.idxmax() == 93  # Patient 93 is Cath=Normal, LAD=Stenotic
 
 
-def test_pipeline_fits_and_predicts_on_toy_batch(raw_data: tuple[pd.DataFrame, pd.DataFrame, dict[str, int]]) -> None:
+def test_pipeline_fits_and_predicts_on_toy_batch(
+    raw_data: tuple[pd.DataFrame, pd.DataFrame, dict[str, int]],
+) -> None:
     """Verify ColumnTransformer and estimator fit/predict on toy batch without error."""
     X, y_df, _ = raw_data
     toy_X = X.iloc[:20]
@@ -81,7 +87,9 @@ def test_pipeline_fits_and_predicts_on_toy_batch(raw_data: tuple[pd.DataFrame, p
     assert len(toy_y) == 20
 
 
-def test_saved_artifacts_reload_and_reproduce_predictions(raw_data: tuple[pd.DataFrame, pd.DataFrame, dict[str, int]]) -> None:
+def test_saved_artifacts_reload_and_reproduce_predictions(
+    raw_data: tuple[pd.DataFrame, pd.DataFrame, dict[str, int]],
+) -> None:
     """Verify saved models reload and generate valid identical probabilities in [0, 1]."""
     X, _, _ = raw_data
     artifacts_dir = Path("artifacts")
@@ -109,10 +117,14 @@ def test_saved_artifacts_reload_and_reproduce_predictions(raw_data: tuple[pd.Dat
         # Deterministic re-prediction
         raw_recheck = model.predict_proba(sample_patient)[:, 1]
         probs_recheck = np.clip(raw_recheck, PROBABILITY_CLIP_MIN, PROBABILITY_CLIP_MAX)
-        np.testing.assert_allclose(probs, probs_recheck, err_msg=f"Non-deterministic prediction for {target}")
+        np.testing.assert_allclose(
+            probs, probs_recheck, err_msg=f"Non-deterministic prediction for {target}"
+        )
 
 
-def test_calibration_clipping_bounds(raw_data: tuple[pd.DataFrame, pd.DataFrame, dict[str, int]]) -> None:
+def test_calibration_clipping_bounds(
+    raw_data: tuple[pd.DataFrame, pd.DataFrame, dict[str, int]],
+) -> None:
     """Verify calibrated probability clipping strictly enforces [0.01, 0.99] across entire dataset."""
     X, _, _ = raw_data
     artifacts_dir = Path("artifacts")
@@ -156,7 +168,7 @@ def test_evaluated_matches_deployed_cad_ensemble() -> None:
 
 
 def test_shap_additivity_in_probability_points_on_deployed_models(
-    raw_data: tuple[pd.DataFrame, pd.DataFrame, dict[str, int]]
+    raw_data: tuple[pd.DataFrame, pd.DataFrame, dict[str, int]],
 ) -> None:
     """Verify SHAP additivity in probability points on deployed calibrated pipelines for all 4 targets."""
     X, _, _ = raw_data
@@ -172,7 +184,9 @@ def test_shap_additivity_in_probability_points_on_deployed_models(
             x: pd.DataFrame | npt.NDArray[Any], m: Any = calibrated_model
         ) -> npt.NDArray[np.float64]:
             df = pd.DataFrame(x, columns=bg_df.columns) if not isinstance(x, pd.DataFrame) else x
-            return cast(npt.NDArray[np.float64], np.asarray(m.predict_proba(df)[:, 1], dtype=np.float64))
+            return cast(
+                npt.NDArray[np.float64], np.asarray(m.predict_proba(df)[:, 1], dtype=np.float64)
+            )
 
         explainer = shap.KernelExplainer(predict_fn, bg_df)
         np.random.seed(42)
@@ -184,11 +198,16 @@ def test_shap_additivity_in_probability_points_on_deployed_models(
         assert 0.0 <= base_val <= 1.0, f"Expected probability base value in [0, 1], got {base_val}"
         computed = base_val + np.sum(sv, axis=1)
         np.testing.assert_allclose(
-            raw_probs, computed, atol=1e-4, err_msg=f"Additivity in probability points failed for {target}"
+            raw_probs,
+            computed,
+            atol=1e-4,
+            err_msg=f"Additivity in probability points failed for {target}",
         )
 
 
-def test_model_agnostic_shap_determinism(raw_data: tuple[pd.DataFrame, pd.DataFrame, dict[str, int]]) -> None:
+def test_model_agnostic_shap_determinism(
+    raw_data: tuple[pd.DataFrame, pd.DataFrame, dict[str, int]],
+) -> None:
     """Verify that model-agnostic KernelExplainer produces identical SHAP values across repeated calls with fixed seed."""
     X, _, _ = raw_data
     artifacts_dir = Path("artifacts")
@@ -198,7 +217,9 @@ def test_model_agnostic_shap_determinism(raw_data: tuple[pd.DataFrame, pd.DataFr
 
     def predict_fn(x: pd.DataFrame | npt.NDArray[Any]) -> npt.NDArray[np.float64]:
         df = pd.DataFrame(x, columns=bg_df.columns) if not isinstance(x, pd.DataFrame) else x
-        return cast(npt.NDArray[np.float64], np.asarray(model.predict_proba(df)[:, 1], dtype=np.float64))
+        return cast(
+            npt.NDArray[np.float64], np.asarray(model.predict_proba(df)[:, 1], dtype=np.float64)
+        )
 
     explainer = shap.KernelExplainer(predict_fn, bg_df)
 
@@ -208,11 +229,13 @@ def test_model_agnostic_shap_determinism(raw_data: tuple[pd.DataFrame, pd.DataFr
     np.random.seed(42)
     sv2 = explainer.shap_values(patient, nsamples=80, silent=True)
 
-    np.testing.assert_allclose(sv1, sv2, atol=1e-12, err_msg="KernelExplainer output was not deterministic")
+    np.testing.assert_allclose(
+        sv1, sv2, atol=1e-12, err_msg="KernelExplainer output was not deterministic"
+    )
 
 
 def test_model_agnostic_shap_accuracy_vs_reference(
-    raw_data: tuple[pd.DataFrame, pd.DataFrame, dict[str, int]]
+    raw_data: tuple[pd.DataFrame, pd.DataFrame, dict[str, int]],
 ) -> None:
     """Verify accuracy versus high-fidelity reference (overlap and Spearman correlation) across 20 dataset patients."""
     ref_path = Path("ml/config/shap_reference_20_patients.joblib")
@@ -232,7 +255,9 @@ def test_model_agnostic_shap_accuracy_vs_reference(
 
     def predict_fn(x: pd.DataFrame | npt.NDArray[Any]) -> npt.NDArray[np.float64]:
         df = pd.DataFrame(x, columns=bg_df.columns) if not isinstance(x, pd.DataFrame) else x
-        return cast(npt.NDArray[np.float64], np.asarray(cad_model.predict_proba(df)[:, 1], dtype=np.float64))
+        return cast(
+            npt.NDArray[np.float64], np.asarray(cad_model.predict_proba(df)[:, 1], dtype=np.float64)
+        )
 
     explainer = shap.KernelExplainer(predict_fn, bg_df)
     np.random.seed(42)
@@ -258,7 +283,7 @@ def test_model_agnostic_shap_accuracy_vs_reference(
 
 
 def test_model_agnostic_shap_age_perturbation_stability(
-    raw_data: tuple[pd.DataFrame, pd.DataFrame, dict[str, int]]
+    raw_data: tuple[pd.DataFrame, pd.DataFrame, dict[str, int]],
 ) -> None:
     """Verify stability: Age +1 year keeps top-3 features unchanged for at least 90% (18/20) of 20 patients."""
     ref_path = Path("ml/config/shap_reference_20_patients.joblib")
@@ -276,7 +301,9 @@ def test_model_agnostic_shap_age_perturbation_stability(
 
     def predict_fn(x: pd.DataFrame | npt.NDArray[Any]) -> npt.NDArray[np.float64]:
         df = pd.DataFrame(x, columns=bg_df.columns) if not isinstance(x, pd.DataFrame) else x
-        return cast(npt.NDArray[np.float64], np.asarray(cad_model.predict_proba(df)[:, 1], dtype=np.float64))
+        return cast(
+            npt.NDArray[np.float64], np.asarray(cad_model.predict_proba(df)[:, 1], dtype=np.float64)
+        )
 
     explainer = shap.KernelExplainer(predict_fn, bg_df)
 
@@ -301,7 +328,9 @@ def test_model_agnostic_shap_age_perturbation_stability(
     )
 
 
-def test_feature_schema_completeness(raw_data: tuple[pd.DataFrame, pd.DataFrame, dict[str, int]]) -> None:
+def test_feature_schema_completeness(
+    raw_data: tuple[pd.DataFrame, pd.DataFrame, dict[str, int]],
+) -> None:
     """Verify feature_schema.json documents every single input feature accurately."""
     X, _, _ = raw_data
     schema_path = Path("ml/config/feature_schema.json")
@@ -319,7 +348,15 @@ def test_feature_schema_completeness(raw_data: tuple[pd.DataFrame, pd.DataFrame,
         assert "type" in entry
         assert entry["type"] in ("numeric", "binary", "categorical", "ordinal")
         assert "group" in entry
-        assert entry["group"] in ("demographics", "history", "vitals", "symptoms", "ecg", "labs", "echo")
+        assert entry["group"] in (
+            "demographics",
+            "history",
+            "vitals",
+            "symptoms",
+            "ecg",
+            "labs",
+            "echo",
+        )
         assert "default" in entry
 
 
@@ -345,7 +382,10 @@ def test_baseline_comparison_table_integrity() -> None:
         assert row["f1_at_operating_cutoff"] > row["trivial_f1"]
         # Balanced accuracy at cutoff must NOT equal plain accuracy at 0.50 (Phase 2.5 regression check)
         assert abs(row["balanced_accuracy_at_cutoff"] - row["accuracy_at_50"]) > 0.01
-        assert abs(row["f1_gain_over_trivial"] - (row["f1_at_operating_cutoff"] - row["trivial_f1"])) < 1e-3
+        assert (
+            abs(row["f1_gain_over_trivial"] - (row["f1_at_operating_cutoff"] - row["trivial_f1"]))
+            < 1e-3
+        )
         assert 0.70 <= row["roc_auc"] <= 1.0
 
 
@@ -354,5 +394,3 @@ def test_verify_artifacts_consistency() -> None:
     from cardiomap_ml.verify_artifacts import verify_artifacts
 
     assert verify_artifacts() is True
-
-

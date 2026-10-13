@@ -9,6 +9,7 @@ CANONICAL_DISCLAIMER: str = (
     "It is not a medical device and not a substitute for formal diagnostic imaging "
     "(such as coronary angiography) or professional clinical judgment."
 )
+API_VERSION: str = "0.2.0"
 MODEL_VERSION: str = "0.2.0"
 
 
@@ -16,7 +17,8 @@ class Settings(BaseSettings):
     """Application settings with environment variable support."""
 
     app_name: str = "CardioMap 3D API"
-    app_version: str = MODEL_VERSION
+    api_version: str = API_VERSION
+    app_version: str = API_VERSION
     model_version: str = MODEL_VERSION
     debug: bool = False
     cors_origins: list[str] = [

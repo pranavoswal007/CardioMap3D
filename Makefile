@@ -9,7 +9,7 @@ RUFF := $(VENV)/bin/ruff
 MYPY := $(VENV)/bin/mypy
 UV := $(shell which uv 2>/dev/null || echo "$$HOME/.local/bin/uv")
 
-.PHONY: all help setup train metrics-table verify-artifacts api web test lint clean check web-typecheck web-build
+.PHONY: all help setup train metrics-table verify-artifacts openapi api web test lint clean check web-typecheck web-build
 
 all: help
 
@@ -18,6 +18,7 @@ help:
 	@echo "=================================="
 	@echo "  make setup   : Initialize virtualenv and install ML, API, and Web dependencies"
 	@echo "  make train   : Execute reproducible ML training pipeline"
+	@echo "  make openapi : Export OpenAPI schema to api/openapi.json"
 	@echo "  make api     : Start FastAPI backend server on http://localhost:8000"
 	@echo "  make web     : Start Vite React frontend dev server on http://localhost:5173"
 	@echo "  make test    : Run Python test suite (leakage assertion & API endpoints)"
@@ -51,6 +52,10 @@ metrics-table:
 verify-artifacts:
 	@echo "==> Verifying artifact consistency..."
 	$(PYTHON) -m cardiomap_ml.verify_artifacts
+
+openapi:
+	@echo "==> Exporting OpenAPI schema to api/openapi.json..."
+	$(PYTHON) -m api.app.export_openapi
 
 api:
 	@echo "==> Launching FastAPI application at http://0.0.0.0:8000..."

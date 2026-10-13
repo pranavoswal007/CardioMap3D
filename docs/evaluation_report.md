@@ -92,7 +92,7 @@ In clinical cohorts with class imbalance, comparing model operating points again
 #### Clinical Context: Why LCX & RCA Thresholds Fall Near or Below Cohort Prevalence
 - For LCX and RCA, prevalence in this registry is ~38–39%. Uncalibrated 0.50 decision thresholds heavily penalize the positive class, producing low default $F_1$ scores (0.4674 and 0.4773) that underperform the trivial baseline.
 - Pre-catheterization screening requires high sensitivity to avoid missing treatable stenosis. Optimizing decision thresholds via Youden's $J$ and Max $F_1$ shifts the operating point to $0.3973$ (LCX) and $0.3354$ (RCA).
-- **Clinical Nuance**: Because the RCA operating threshold ($0.3354$) is below cohort prevalence ($37.62\%$), a patient receiving a "Moderate Risk" label ($t \le p < t + 0.15$) may have a calibrated probability near or below the average patient in the referred cohort. This reflects crossing a sensitive screening trigger, rather than possessing above-average cohort risk.
+- **Clinical Nuance**: Because the RCA operating threshold ($0.3354$) is below cohort prevalence ($37.62\%$), a patient receiving a "Moderate" tier label ($t \le p < t + 0.15$) may have a calibrated probability near or below the average patient in the referred cohort. This reflects crossing a sensitive screening trigger, rather than possessing above-average cohort risk.
 
 ---
 

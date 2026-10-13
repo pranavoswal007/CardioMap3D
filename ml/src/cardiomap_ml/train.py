@@ -10,13 +10,16 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import platform
 import shutil
+import subprocess
 import sys
 import time
 from pathlib import Path
 from typing import Any, cast
 
 import joblib
+import lightgbm as lgb
 import matplotlib
 
 matplotlib.use("Agg")
@@ -24,7 +27,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
+import scipy
 import shap
+import sklearn
+import xgboost as xgb
 from lightgbm import LGBMClassifier
 from sklearn.calibration import CalibratedClassifierCV, calibration_curve
 from sklearn.compose import ColumnTransformer
@@ -68,10 +74,29 @@ logger = logging.getLogger(__name__)
 
 # Feature group specifications for the 55 inputs
 NUMERIC_FEATURES = [
-    "Age", "Weight", "Length", "BMI", "BP", "PR",
-    "FBS", "CR", "TG", "LDL", "HDL", "BUN", "ESR",
-    "HB", "K", "Na", "WBC", "Lymph", "Neut", "PLT",
-    "EF-TTE", "Function Class", "Region RWMA",
+    "Age",
+    "Weight",
+    "Length",
+    "BMI",
+    "BP",
+    "PR",
+    "FBS",
+    "CR",
+    "TG",
+    "LDL",
+    "HDL",
+    "BUN",
+    "ESR",
+    "HB",
+    "K",
+    "Na",
+    "WBC",
+    "Lymph",
+    "Neut",
+    "PLT",
+    "EF-TTE",
+    "Function Class",
+    "Region RWMA",
 ]
 
 CATEGORICAL_FEATURES = ["BBB", "VHD"]
@@ -128,7 +153,11 @@ NESTED_TUNING_CONFIG: dict[str, Any] = {
             "reg_lambda": 2.0,
         },
         "SoftVotingEnsemble": {
-            "members": ["LogisticRegression(C=1.0)", "RandomForest(max_depth=6)", "XGBoost(max_depth=4)"],
+            "members": [
+                "LogisticRegression(C=1.0)",
+                "RandomForest(max_depth=6)",
+                "XGBoost(max_depth=4)",
+            ],
             "voting": "soft",
         },
     },
@@ -161,11 +190,36 @@ CATEGORICAL_ENCODING_INFO: dict[str, Any] = {
     },
     "Binary_Clinical_Features": {
         "features": [
-            "Sex", "DM", "HTN", "Current Smoker", "EX-Smoker", "FH", "Obesity", "CRF", "CVA",
-            "Airway disease", "Thyroid Disease", "CHF", "DLP", "Edema", "Weak Peripheral Pulse",
-            "Lung rales", "Systolic Murmur", "Diastolic Murmur", "Typical Chest Pain", "Dyspnea",
-            "Atypical", "Nonanginal", "Exertional CP", "LowTH Ang", "Q Wave", "St Elevation",
-            "St Depression", "Tinversion", "LVH", "Poor R Progression",
+            "Sex",
+            "DM",
+            "HTN",
+            "Current Smoker",
+            "EX-Smoker",
+            "FH",
+            "Obesity",
+            "CRF",
+            "CVA",
+            "Airway disease",
+            "Thyroid Disease",
+            "CHF",
+            "DLP",
+            "Edema",
+            "Weak Peripheral Pulse",
+            "Lung rales",
+            "Systolic Murmur",
+            "Diastolic Murmur",
+            "Typical Chest Pain",
+            "Dyspnea",
+            "Atypical",
+            "Nonanginal",
+            "Exertional CP",
+            "LowTH Ang",
+            "Q Wave",
+            "St Elevation",
+            "St Depression",
+            "Tinversion",
+            "LVH",
+            "Poor R Progression",
         ],
         "encoding": "BinaryFeatureEncoder mapping {'Y', 'Male', 1} -> 1.0, {'N', 'Fmale', 0} -> 0.0",
     },
@@ -180,31 +234,41 @@ def create_preprocessor(feature_columns: list[str]) -> ColumnTransformer:
 
     transformers = []
     if num_cols:
-        transformers.append((
-            "num",
-            Pipeline([
-                ("imputer", SimpleImputer(strategy="median")),
-                ("scaler", StandardScaler()),
-            ]),
-            num_cols,
-        ))
+        transformers.append(
+            (
+                "num",
+                Pipeline(
+                    [
+                        ("imputer", SimpleImputer(strategy="median")),
+                        ("scaler", StandardScaler()),
+                    ]
+                ),
+                num_cols,
+            )
+        )
     if cat_cols:
-        transformers.append((
-            "cat",
-            OneHotEncoder(drop="first", sparse_output=False, handle_unknown="ignore"),
-            cat_cols,
-        ))
+        transformers.append(
+            (
+                "cat",
+                OneHotEncoder(drop="first", sparse_output=False, handle_unknown="ignore"),
+                cat_cols,
+            )
+        )
     if bin_cols:
-        transformers.append((
-            "bin",
-            BinaryFeatureEncoder(),
-            bin_cols,
-        ))
+        transformers.append(
+            (
+                "bin",
+                BinaryFeatureEncoder(),
+                bin_cols,
+            )
+        )
 
     return ColumnTransformer(transformers=transformers)
 
 
-def calculate_metrics_at_threshold(y_true: npt.NDArray[Any], y_prob: npt.NDArray[Any], threshold: float = 0.5) -> dict[str, float]:
+def calculate_metrics_at_threshold(
+    y_true: npt.NDArray[Any], y_prob: npt.NDArray[Any], threshold: float = 0.5
+) -> dict[str, float]:
     """Compute classification metrics for continuous probabilities at a specific decision threshold."""
     y_pred = (y_prob >= threshold).astype(int)
     acc = float(accuracy_score(y_true, y_pred))
@@ -279,7 +343,13 @@ def find_optimal_thresholds(y_true: npt.NDArray[Any], y_prob: npt.NDArray[Any]) 
         tn = np.sum((y_true == 0) & (pred == 0))
         fp = np.sum((y_true == 0) & (pred == 1))
         spec = float(tn / (tn + fp)) if (tn + fp) > 0 else 0.0
-        tradeoffs.append({"threshold": round(float(t), 2), "sensitivity": round(sens, 4), "specificity": round(spec, 4)})
+        tradeoffs.append(
+            {
+                "threshold": round(float(t), 2),
+                "sensitivity": round(sens, 4),
+                "specificity": round(spec, 4),
+            }
+        )
 
     return {
         "default_threshold": 0.5,
@@ -316,11 +386,16 @@ def load_dataset(data_path: str | Path) -> tuple[pd.DataFrame, pd.DataFrame, dic
         "discrepancy_count": len(inconsistent),
         "discrepancy_indices": inconsistent.index.tolist(),
     }
-    logger.info("Target consistency check: %d discrepancies found. (Index 93: Cath=Normal, LAD=Stenotic)", len(inconsistent))
+    logger.info(
+        "Target consistency check: %d discrepancies found. (Index 93: Cath=Normal, LAD=Stenotic)",
+        len(inconsistent),
+    )
 
     X = df.drop(columns=list(RAW_TARGET_COLUMNS))
     if len(X.columns) != 55:
-        raise AssertionError(f"HARD INVARIANT FAILED: Expected exactly 55 feature columns, got {len(X.columns)}")
+        raise AssertionError(
+            f"HARD INVARIANT FAILED: Expected exactly 55 feature columns, got {len(X.columns)}"
+        )
     assert_no_target_leakage(X.columns)
     logger.info("Feature invariant passed: X has exactly 55 columns with 0 target leakage.")
 
@@ -345,10 +420,17 @@ def evaluate_baselines(
     # 2. Clinical subset LR
     X_clin = X[CLINICAL_SUBSET]
     prep_clin = create_preprocessor(CLINICAL_SUBSET)
-    lr_clin = Pipeline([
-        ("prep", prep_clin),
-        ("clf", LogisticRegression(random_state=RANDOM_SEED, class_weight="balanced", max_iter=1000)),
-    ])
+    lr_clin = Pipeline(
+        [
+            ("prep", prep_clin),
+            (
+                "clf",
+                LogisticRegression(
+                    random_state=RANDOM_SEED, class_weight="balanced", max_iter=1000
+                ),
+            ),
+        ]
+    )
 
     oof_clin_probs = np.zeros(len(y))
     for train_idx, val_idx in cv_splits:
@@ -379,8 +461,13 @@ def train_and_evaluate_target(
 ) -> dict[str, Any]:
     """Train models, evaluate out-of-fold metrics, calibrate best model, and generate plots."""
     logger.info("---------------------------------------------------------------")
-    logger.info("Initiating Training & CV for Target: %s (Positives: %d/%d, %.2f%%)",
-                target_name, np.sum(y), len(y), 100 * np.mean(y))
+    logger.info(
+        "Initiating Training & CV for Target: %s (Positives: %d/%d, %.2f%%)",
+        target_name,
+        np.sum(y),
+        len(y),
+        100 * np.mean(y),
+    )
 
     rskf = RepeatedStratifiedKFold(n_splits=n_splits, n_repeats=n_repeats, random_state=RANDOM_SEED)
     splits = list(rskf.split(X, y))
@@ -389,41 +476,140 @@ def train_and_evaluate_target(
 
     # Candidate models including Phase 1.5 additions (ElasticNet, RF_Shallow, LGBM_Shallow)
     candidate_factories: dict[str, Any] = {
-        "LogisticRegression": lambda: Pipeline([
-            ("prep", create_preprocessor(list(X.columns))),
-            ("clf", LogisticRegression(max_iter=1000, random_state=RANDOM_SEED, class_weight="balanced")),
-        ]),
-        "ElasticNet_LR": lambda: Pipeline([
-            ("prep", create_preprocessor(list(X.columns))),
-            ("clf", LogisticRegression(solver="saga", l1_ratio=0.5, C=0.2, max_iter=2000, random_state=RANDOM_SEED, class_weight="balanced")),
-        ]),
-        "RandomForest": lambda: Pipeline([
-            ("prep", create_preprocessor(list(X.columns))),
-            ("clf", RandomForestClassifier(n_estimators=100, max_depth=6, random_state=RANDOM_SEED, class_weight="balanced", n_jobs=2)),
-        ]),
-        "RF_Shallow": lambda: Pipeline([
-            ("prep", create_preprocessor(list(X.columns))),
-            ("clf", RandomForestClassifier(n_estimators=100, max_depth=3, min_samples_leaf=10, random_state=RANDOM_SEED, class_weight="balanced", n_jobs=2)),
-        ]),
-        "LightGBM": lambda: Pipeline([
-            ("prep", create_preprocessor(list(X.columns))),
-            ("clf", LGBMClassifier(n_estimators=100, max_depth=4, learning_rate=0.05, random_state=RANDOM_SEED, verbose=-1, n_jobs=2)),
-        ]),
-        "LGBM_Shallow": lambda: Pipeline([
-            ("prep", create_preprocessor(list(X.columns))),
-            ("clf", LGBMClassifier(n_estimators=100, max_depth=2, num_leaves=3, min_child_samples=20, learning_rate=0.03, reg_alpha=1.0, reg_lambda=2.0, verbose=-1, random_state=RANDOM_SEED, n_jobs=2)),
-        ]),
-        "SoftVotingEnsemble": lambda: Pipeline([
-            ("prep", create_preprocessor(list(X.columns))),
-            ("clf", VotingClassifier(
-                estimators=[
-                    ("lr", LogisticRegression(max_iter=1000, random_state=RANDOM_SEED, class_weight="balanced")),
-                    ("rf", RandomForestClassifier(n_estimators=100, max_depth=6, random_state=RANDOM_SEED, class_weight="balanced", n_jobs=2)),
-                    ("xgb", XGBClassifier(n_estimators=100, max_depth=4, learning_rate=0.05, random_state=RANDOM_SEED, eval_metric="logloss", n_jobs=2)),
-                ],
-                voting="soft",
-            )),
-        ]),
+        "LogisticRegression": lambda: Pipeline(
+            [
+                ("prep", create_preprocessor(list(X.columns))),
+                (
+                    "clf",
+                    LogisticRegression(
+                        max_iter=1000, random_state=RANDOM_SEED, class_weight="balanced"
+                    ),
+                ),
+            ]
+        ),
+        "ElasticNet_LR": lambda: Pipeline(
+            [
+                ("prep", create_preprocessor(list(X.columns))),
+                (
+                    "clf",
+                    LogisticRegression(
+                        solver="saga",
+                        l1_ratio=0.5,
+                        C=0.2,
+                        max_iter=2000,
+                        random_state=RANDOM_SEED,
+                        class_weight="balanced",
+                    ),
+                ),
+            ]
+        ),
+        "RandomForest": lambda: Pipeline(
+            [
+                ("prep", create_preprocessor(list(X.columns))),
+                (
+                    "clf",
+                    RandomForestClassifier(
+                        n_estimators=100,
+                        max_depth=6,
+                        random_state=RANDOM_SEED,
+                        class_weight="balanced",
+                        n_jobs=2,
+                    ),
+                ),
+            ]
+        ),
+        "RF_Shallow": lambda: Pipeline(
+            [
+                ("prep", create_preprocessor(list(X.columns))),
+                (
+                    "clf",
+                    RandomForestClassifier(
+                        n_estimators=100,
+                        max_depth=3,
+                        min_samples_leaf=10,
+                        random_state=RANDOM_SEED,
+                        class_weight="balanced",
+                        n_jobs=2,
+                    ),
+                ),
+            ]
+        ),
+        "LightGBM": lambda: Pipeline(
+            [
+                ("prep", create_preprocessor(list(X.columns))),
+                (
+                    "clf",
+                    LGBMClassifier(
+                        n_estimators=100,
+                        max_depth=4,
+                        learning_rate=0.05,
+                        random_state=RANDOM_SEED,
+                        verbose=-1,
+                        n_jobs=2,
+                    ),
+                ),
+            ]
+        ),
+        "LGBM_Shallow": lambda: Pipeline(
+            [
+                ("prep", create_preprocessor(list(X.columns))),
+                (
+                    "clf",
+                    LGBMClassifier(
+                        n_estimators=100,
+                        max_depth=2,
+                        num_leaves=3,
+                        min_child_samples=20,
+                        learning_rate=0.03,
+                        reg_alpha=1.0,
+                        reg_lambda=2.0,
+                        verbose=-1,
+                        random_state=RANDOM_SEED,
+                        n_jobs=2,
+                    ),
+                ),
+            ]
+        ),
+        "SoftVotingEnsemble": lambda: Pipeline(
+            [
+                ("prep", create_preprocessor(list(X.columns))),
+                (
+                    "clf",
+                    VotingClassifier(
+                        estimators=[
+                            (
+                                "lr",
+                                LogisticRegression(
+                                    max_iter=1000, random_state=RANDOM_SEED, class_weight="balanced"
+                                ),
+                            ),
+                            (
+                                "rf",
+                                RandomForestClassifier(
+                                    n_estimators=100,
+                                    max_depth=6,
+                                    random_state=RANDOM_SEED,
+                                    class_weight="balanced",
+                                    n_jobs=2,
+                                ),
+                            ),
+                            (
+                                "xgb",
+                                XGBClassifier(
+                                    n_estimators=100,
+                                    max_depth=4,
+                                    learning_rate=0.05,
+                                    random_state=RANDOM_SEED,
+                                    eval_metric="logloss",
+                                    n_jobs=2,
+                                ),
+                            ),
+                        ],
+                        voting="soft",
+                    ),
+                ),
+            ]
+        ),
     }
 
     model_evaluations: dict[str, Any] = {}
@@ -476,14 +662,22 @@ def train_and_evaluate_target(
             agg_metrics[k]["point_estimate"] = round(pt_val, 4)
             agg_metrics[k]["ci_95"] = [round(low, 4), round(high, 4)]
             # Verify containment
-            inside_ci = bool(low <= pt_val <= high or abs(pt_val - low) < 1e-4 or abs(pt_val - high) < 1e-4)
+            inside_ci = bool(
+                low <= pt_val <= high or abs(pt_val - low) < 1e-4 or abs(pt_val - high) < 1e-4
+            )
             agg_metrics[k]["inside_ci"] = inside_ci
 
-        logger.info("  [%s] Pooled ROC-AUC: %.4f [95%% CI: %.4f - %.4f] (Fold Mean: %.4f +/- %.4f, Brier: %.4f, Time: %.2fs)",
-                    model_name, agg_metrics["roc_auc"]["point_estimate"],
-                    agg_metrics["roc_auc"]["ci_95"][0], agg_metrics["roc_auc"]["ci_95"][1],
-                    agg_metrics["roc_auc"]["fold_mean"], agg_metrics["roc_auc"]["fold_std"],
-                    agg_metrics["brier_score"]["point_estimate"], elapsed)
+        logger.info(
+            "  [%s] Pooled ROC-AUC: %.4f [95%% CI: %.4f - %.4f] (Fold Mean: %.4f +/- %.4f, Brier: %.4f, Time: %.2fs)",
+            model_name,
+            agg_metrics["roc_auc"]["point_estimate"],
+            agg_metrics["roc_auc"]["ci_95"][0],
+            agg_metrics["roc_auc"]["ci_95"][1],
+            agg_metrics["roc_auc"]["fold_mean"],
+            agg_metrics["roc_auc"]["fold_std"],
+            agg_metrics["brier_score"]["point_estimate"],
+            elapsed,
+        )
 
         model_evaluations[model_name] = {
             "metrics": agg_metrics,
@@ -493,10 +687,17 @@ def train_and_evaluate_target(
     # Model Selection: Best by pooled out-of-fold ROC-AUC (tie-break by lowest Brier score)
     best_model_name = max(
         candidate_factories.keys(),
-        key=lambda m: (model_evaluations[m]["metrics"]["roc_auc"]["point_estimate"], -model_evaluations[m]["metrics"]["brier_score"]["point_estimate"]),
+        key=lambda m: (
+            model_evaluations[m]["metrics"]["roc_auc"]["point_estimate"],
+            -model_evaluations[m]["metrics"]["brier_score"]["point_estimate"],
+        ),
     )
-    logger.info("Selected BEST model for %s: %s (Pooled ROC-AUC: %.4f)",
-                target_name, best_model_name, model_evaluations[best_model_name]["metrics"]["roc_auc"]["point_estimate"])
+    logger.info(
+        "Selected BEST model for %s: %s (Pooled ROC-AUC: %.4f)",
+        target_name,
+        best_model_name,
+        model_evaluations[best_model_name]["metrics"]["roc_auc"]["point_estimate"],
+    )
 
     # Calibration: Sigmoid is used across all targets to guarantee continuous monotonicity
     # and prevent step-plateaus/zero/one extremes.
@@ -536,9 +737,16 @@ def train_and_evaluate_target(
     # Apply clinical probability safety clipping: [PROBABILITY_CLIP_MIN, PROBABILITY_CLIP_MAX]
     oof_cal = np.clip(oof_cal_raw, PROBABILITY_CLIP_MIN, PROBABILITY_CLIP_MAX)
 
-    logger.info("Calibration for %s (%s): Uncal Brier=%.4f -> Isotonic=%.4f, Sigmoid=%.4f (Clipped range: [%.4f, %.4f])",
-                target_name, calibration_method, mean_brier_before, mean_brier_iso, mean_brier_after,
-                float(np.min(oof_cal)), float(np.max(oof_cal)))
+    logger.info(
+        "Calibration for %s (%s): Uncal Brier=%.4f -> Isotonic=%.4f, Sigmoid=%.4f (Clipped range: [%.4f, %.4f])",
+        target_name,
+        calibration_method,
+        mean_brier_before,
+        mean_brier_iso,
+        mean_brier_after,
+        float(np.min(oof_cal)),
+        float(np.max(oof_cal)),
+    )
 
     # Metrics for the FINAL DEPLOYED (calibrated + clipped) model
     deployed_oof_metrics = calculate_metrics_at_threshold(y, oof_cal, threshold=0.5)
@@ -563,13 +771,18 @@ def train_and_evaluate_target(
         deployed_metrics[k] = {
             "point_estimate": round(pt_val, 4),
             "ci_95": [round(low, 4), round(high, 4)],
-            "inside_ci": bool(low <= pt_val <= high or abs(pt_val - low) < 1e-4 or abs(pt_val - high) < 1e-4),
+            "inside_ci": bool(
+                low <= pt_val <= high or abs(pt_val - low) < 1e-4 or abs(pt_val - high) < 1e-4
+            ),
         }
 
     # Threshold optimization
     threshold_analysis = find_optimal_thresholds(y, oof_cal)
-    logger.info("Threshold optimization for deployed %s: Max F1 threshold = %.4f (Default 0.50)",
-                target_name, threshold_analysis["selected_threshold"])
+    logger.info(
+        "Threshold optimization for deployed %s: Max F1 threshold = %.4f (Default 0.50)",
+        target_name,
+        threshold_analysis["selected_threshold"],
+    )
 
     # Final Fit: Train Selected Model and Calibrated Wrapper on Full Dataset
     logger.info("Fitting final production calibrated model on complete dataset...")
@@ -615,9 +828,14 @@ def train_and_evaluate_target(
             "brier_uncalibrated": round(mean_brier_before, 4),
             "brier_isotonic": round(mean_brier_iso, 4),
             "brier_sigmoid": round(mean_brier_after, 4),
-            "brier_reduction_percent": round(100 * (mean_brier_before - mean_brier_after) / mean_brier_before, 2),
+            "brier_reduction_percent": round(
+                100 * (mean_brier_before - mean_brier_after) / mean_brier_before, 2
+            ),
             "probability_clipping_bounds": [PROBABILITY_CLIP_MIN, PROBABILITY_CLIP_MAX],
-            "clipped_oof_range": [round(float(np.min(oof_cal)), 4), round(float(np.max(oof_cal)), 4)],
+            "clipped_oof_range": [
+                round(float(np.min(oof_cal)), 4),
+                round(float(np.max(oof_cal)), 4),
+            ],
         },
         "final_deployed_model_metrics": deployed_metrics,
         "thresholds": threshold_analysis,
@@ -627,15 +845,25 @@ def train_and_evaluate_target(
     }
 
 
-def plot_diagnostic_curves(target_name: str, y_true: npt.NDArray[Any], p_uncal: npt.NDArray[Any], p_cal: npt.NDArray[Any], artifacts_dir: Path) -> None:
+def plot_diagnostic_curves(
+    target_name: str,
+    y_true: npt.NDArray[Any],
+    p_uncal: npt.NDArray[Any],
+    p_cal: npt.NDArray[Any],
+    artifacts_dir: Path,
+) -> None:
     """Generate and save publication-grade ROC, PR, and Calibration curves."""
     _fig, axes = plt.subplots(1, 3, figsize=(18, 5))
 
     # 1. ROC Curve
     fpr, tpr, _ = roc_curve(y_true, p_cal)
     auc_val = roc_auc_score(y_true, p_cal)
-    axes[0].plot(fpr, tpr, color="#2563eb", lw=2.5, label=f"Calibrated Deployed (AUC = {auc_val:.3f})")
-    axes[0].plot([0, 1], [0, 1], color="#94a3b8", linestyle="--", lw=1.5, label="Random (AUC = 0.500)")
+    axes[0].plot(
+        fpr, tpr, color="#2563eb", lw=2.5, label=f"Calibrated Deployed (AUC = {auc_val:.3f})"
+    )
+    axes[0].plot(
+        [0, 1], [0, 1], color="#94a3b8", linestyle="--", lw=1.5, label="Random (AUC = 0.500)"
+    )
     axes[0].set_title(f"ROC Curve: {target_name}", fontsize=12, fontweight="bold")
     axes[0].set_xlabel("False Positive Rate (1 - Specificity)")
     axes[0].set_ylabel("True Positive Rate (Sensitivity)")
@@ -646,8 +874,16 @@ def plot_diagnostic_curves(target_name: str, y_true: npt.NDArray[Any], p_uncal: 
     precision, recall, _ = precision_recall_curve(y_true, p_cal)
     pr_auc = average_precision_score(y_true, p_cal)
     base_rate = float(np.mean(y_true))
-    axes[1].plot(recall, precision, color="#059669", lw=2.5, label=f"Calibrated Deployed (PR-AUC = {pr_auc:.3f})")
-    axes[1].axhline(y=base_rate, color="#94a3b8", linestyle="--", lw=1.5, label=f"Prevalence ({base_rate:.2f})")
+    axes[1].plot(
+        recall,
+        precision,
+        color="#059669",
+        lw=2.5,
+        label=f"Calibrated Deployed (PR-AUC = {pr_auc:.3f})",
+    )
+    axes[1].axhline(
+        y=base_rate, color="#94a3b8", linestyle="--", lw=1.5, label=f"Prevalence ({base_rate:.2f})"
+    )
     axes[1].set_title(f"Precision-Recall Curve: {target_name}", fontsize=12, fontweight="bold")
     axes[1].set_xlabel("Recall (Sensitivity)")
     axes[1].set_ylabel("Precision (Positive Predictive Value)")
@@ -658,8 +894,17 @@ def plot_diagnostic_curves(target_name: str, y_true: npt.NDArray[Any], p_uncal: 
     prob_true_uncal, prob_pred_uncal = calibration_curve(y_true, p_uncal, n_bins=5)
     prob_true_cal, prob_pred_cal = calibration_curve(y_true, p_cal, n_bins=5)
     axes[2].plot([0, 1], [0, 1], color="#94a3b8", linestyle="--", label="Perfect Calibration")
-    axes[2].plot(prob_pred_uncal, prob_true_uncal, "s-", color="#dc2626", lw=1.8, label="Uncalibrated")
-    axes[2].plot(prob_pred_cal, prob_true_cal, "o-", color="#16a34a", lw=2.2, label="Calibrated Sigmoid (Clipped)")
+    axes[2].plot(
+        prob_pred_uncal, prob_true_uncal, "s-", color="#dc2626", lw=1.8, label="Uncalibrated"
+    )
+    axes[2].plot(
+        prob_pred_cal,
+        prob_true_cal,
+        "o-",
+        color="#16a34a",
+        lw=2.2,
+        label="Calibrated Sigmoid (Clipped)",
+    )
     axes[2].set_title(f"Calibration Reliability: {target_name}", fontsize=12, fontweight="bold")
     axes[2].set_xlabel("Mean Predicted Probability")
     axes[2].set_ylabel("Observed Empirical Fraction")
@@ -692,7 +937,11 @@ def compute_shap_explanations(
     - Patient-level relative contribution %: |shap_i| / sum(|shap|) * 100, signed by direction.
     - Global importance computed on a random sample of at least 150 rows.
     """
-    logger.info("Computing SHAP explanations in probability points for deployed %s (%s)...", target_name, best_model_name)
+    logger.info(
+        "Computing SHAP explanations in probability points for deployed %s (%s)...",
+        target_name,
+        best_model_name,
+    )
 
     # Save a representative 30-patient stratified background sample of real patients
     pos_idx = np.where(y == 1)[0]
@@ -711,10 +960,13 @@ def compute_shap_explanations(
     joblib.dump(background_df, bg_joblib_path)
 
     try:
+
         def predict_fn(x: Any) -> npt.NDArray[np.float64]:
             if isinstance(x, np.ndarray):
                 x = pd.DataFrame(x, columns=X.columns)
-            return cast(npt.NDArray[np.float64], np.asarray(model.predict_proba(x)[:, 1], dtype=np.float64))
+            return cast(
+                npt.NDArray[np.float64], np.asarray(model.predict_proba(x)[:, 1], dtype=np.float64)
+            )
 
         explainer = shap.KernelExplainer(predict_fn, background_df)
         base_value = float(explainer.expected_value)
@@ -733,8 +985,11 @@ def compute_shap_explanations(
         # Verify additivity
         p_eval = predict_fn(eval_df)
         additivity_diffs = np.abs(p_eval - (base_value + np.sum(shap_values_raw, axis=1)))
-        logger.info("SHAP additivity verification for %s: max discrepancy = %.2e",
-                    target_name, float(np.max(additivity_diffs)))
+        logger.info(
+            "SHAP additivity verification for %s: max discrepancy = %.2e",
+            target_name,
+            float(np.max(additivity_diffs)),
+        )
 
         # Patient-level relative contribution percentage: |shap_i| / sum(|shap|) * 100
         abs_shap = np.abs(shap_values_raw)
@@ -767,17 +1022,24 @@ def compute_shap_explanations(
             }
             if rank <= 10:
                 is_flagged = fname in target_noisy
-                top_10.append({
-                    "rank": rank,
-                    "feature": fname,
-                    "mean_abs_raw_score": round(raw_val, 5),
-                    "relative_contribution_pct": round(pct_val, 2),
-                    "stability_status": "potentially noisy sample-specific correlate" if is_flagged else "stable model-learned association",
-                    "clinical_characterization": "model-learned association, not a causal finding",
-                })
+                top_10.append(
+                    {
+                        "rank": rank,
+                        "feature": fname,
+                        "mean_abs_raw_score": round(raw_val, 5),
+                        "relative_contribution_pct": round(pct_val, 2),
+                        "stability_status": "potentially noisy sample-specific correlate"
+                        if is_flagged
+                        else "stable model-learned association",
+                        "clinical_characterization": "model-learned association, not a causal finding",
+                    }
+                )
 
-        logger.info("Top 5 SHAP features for %s: %s",
-                    target_name, [f"{f['feature']} ({f['relative_contribution_pct']}%)" for f in top_10[:5]])
+        logger.info(
+            "Top 5 SHAP features for %s: %s",
+            target_name,
+            [f"{f['feature']} ({f['relative_contribution_pct']}%)" for f in top_10[:5]],
+        )
 
         return {
             "unit": raw_unit,
@@ -834,17 +1096,50 @@ def run_pipeline(
         shap_global[target_name] = res["shap"]
 
     # 4. Save metrics.json, thresholds.json, shap_global.json
+    try:
+        git_commit = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+    except (subprocess.SubprocessError, OSError):
+        git_commit = "unknown"
+    try:
+        git_status = subprocess.check_output(["git", "status", "--porcelain"], text=True).strip()
+        git_dirty = bool(git_status)
+    except (subprocess.SubprocessError, OSError):
+        git_dirty = False
+
+    library_versions = {
+        "python": platform.python_version(),
+        "numpy": np.__version__,
+        "scipy": scipy.__version__,
+        "scikit-learn": sklearn.__version__,
+        "xgboost": xgb.__version__,
+        "lightgbm": lgb.__version__,
+        "shap": shap.__version__,
+    }
+
+    provenance = {
+        "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "total_runtime_seconds": round(time.time() - start_time, 2),
+        "commit": git_commit,
+        "dirty": git_dirty,
+        "library_versions": library_versions,
+    }
+
     metrics_path = artifacts_path / "metrics.json"
     with open(metrics_path, "w", encoding="utf-8") as f:
-        json.dump({
-            "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            "random_seed": seed,
-            "nested_tuning_config": NESTED_TUNING_CONFIG,
-            "categorical_encoding_info": CATEGORICAL_ENCODING_INFO,
-            "consistency_summary": consistency_summary,
-            "targets": results_per_target,
-            "total_runtime_seconds": round(time.time() - start_time, 2),
-        }, f, indent=2)
+        json.dump(
+            {
+                "provenance": provenance,
+                "generated_at": provenance["generated_at"],
+                "random_seed": seed,
+                "nested_tuning_config": NESTED_TUNING_CONFIG,
+                "categorical_encoding_info": CATEGORICAL_ENCODING_INFO,
+                "consistency_summary": consistency_summary,
+                "targets": results_per_target,
+                "total_runtime_seconds": provenance["total_runtime_seconds"],
+            },
+            f,
+            indent=2,
+        )
     logger.info("Saved metrics.json to %s", metrics_path)
 
     thresholds_path = artifacts_path / "thresholds.json"
@@ -857,9 +1152,22 @@ def run_pipeline(
         json.dump(shap_global, f, indent=2)
     logger.info("Saved shap_global.json to %s", shap_path)
 
+    # 5. Automatically compute and append baseline comparison table
+    try:
+        from cardiomap_ml.metrics_table import compute_baseline_table, update_metrics_json
+
+        table = compute_baseline_table(data_path=Path(data_path), artifacts_dir=artifacts_path)
+        update_metrics_json(table, artifacts_dir=artifacts_path)
+        logger.info("Computed and saved baseline_comparison_table to metrics.json")
+    except (RuntimeError, ValueError, KeyError, OSError) as e:
+        logger.warning("Could not compute baseline_comparison_table: %s", e)
+
     total_time = time.time() - start_time
-    logger.info("CardioMap 3D Training Pipeline completed successfully in %.2f seconds (%.2f minutes).",
-                total_time, total_time / 60.0)
+    logger.info(
+        "CardioMap 3D Training Pipeline completed successfully in %.2f seconds (%.2f minutes).",
+        total_time,
+        total_time / 60.0,
+    )
 
     return {
         "status": "success",
@@ -871,8 +1179,15 @@ def run_pipeline(
 def parse_args() -> argparse.Namespace:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="CardioMap 3D ML Training Pipeline")
-    parser.add_argument("--data-path", type=str, default="data/raw/z_alizadeh_sani_extension.xlsx", help="Raw dataset path")
-    parser.add_argument("--artifacts-dir", type=str, default="artifacts", help="Artifacts directory")
+    parser.add_argument(
+        "--data-path",
+        type=str,
+        default="data/raw/z_alizadeh_sani_extension.xlsx",
+        help="Raw dataset path",
+    )
+    parser.add_argument(
+        "--artifacts-dir", type=str, default="artifacts", help="Artifacts directory"
+    )
     parser.add_argument("--splits", type=int, default=5, help="Number of stratified folds")
     parser.add_argument("--repeats", type=int, default=5, help="Number of repetitions")
     parser.add_argument("--seed", type=int, default=RANDOM_SEED, help="Random seed")

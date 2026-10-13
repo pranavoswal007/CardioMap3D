@@ -1,4 +1,19 @@
 {
+  "provenance": {
+    "generated_at": "2026-10-12T13:37:00Z",
+    "total_runtime_seconds": 160.51,
+    "commit": "10439d19b8c6a1a064dda112912c6303f018c232",
+    "dirty": false,
+    "library_versions": {
+      "python": "3.11.15",
+      "numpy": "1.26.4",
+      "scipy": "1.17.1",
+      "scikit-learn": "1.9.1",
+      "xgboost": "3.2.0",
+      "lightgbm": "4.7.0",
+      "shap": "0.49.1"
+    }
+  },
   "generated_at": "2026-10-12T13:37:00Z",
   "random_seed": 42,
   "nested_tuning_config": {
