@@ -348,3 +348,11 @@ def test_baseline_comparison_table_integrity() -> None:
         assert abs(row["f1_gain_over_trivial"] - (row["f1_at_operating_cutoff"] - row["trivial_f1"])) < 1e-3
         assert 0.70 <= row["roc_auc"] <= 1.0
 
+
+def test_verify_artifacts_consistency() -> None:
+    """Verify artifact consistency across metrics.json, thresholds.json, and deployed joblib models."""
+    from cardiomap_ml.verify_artifacts import verify_artifacts
+
+    assert verify_artifacts() is True
+
+

@@ -13,7 +13,7 @@ import joblib
 import numpy as np
 import pandas as pd
 import shap
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -228,11 +228,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(
     title=settings.app_name,
-    version=settings.app_version,
-    description=(
-        "Production-grade API for interactive 3D coronary artery risk visualization, "
-        "multi-target stenosis prediction, and SHAP-based clinical explanations."
-    ),
+    version=settings.model_version,
+    description=settings.disclaimer,
     lifespan=lifespan,
 )
 
@@ -266,7 +263,7 @@ def health_check() -> HealthResponse:
     return HealthResponse(
         status="ok",
         app_name=settings.app_name,
-        model_version=settings.app_version,
+        model_version=settings.model_version,
         artifacts_ready=STATE["artifacts_ready"],
         disclaimer=settings.disclaimer,
     )
@@ -439,7 +436,7 @@ def predict_stenosis_risk(patient_features: dict[str, Any]) -> PredictResponse:
         coherence=coherence_info,
         imputed_features=imputed_fields,
         warnings=warnings,
-        model_version=settings.app_version,
+        model_version=settings.model_version,
         disclaimer=settings.disclaimer,
     )
     if len(STATE["predict_cache"]) >= 500:
@@ -449,14 +446,38 @@ def predict_stenosis_risk(patient_features: dict[str, Any]) -> PredictResponse:
 
 
 @app.post("/explain", response_model=ExplainResponse)
-def explain_stenosis_prediction(patient_features: dict[str, Any], top_n: int = 10) -> ExplainResponse:
+def explain_stenosis_prediction(
+    patient_features: dict[str, Any],
+    top_n: int = 10,
+    targets: str | None = Query(default=None, description="Comma-separated subset of targets (cad, lad, lcx, rca)"),
+) -> ExplainResponse:
     """Compute local SHAP feature attributions in raw score and normalized relative contribution %."""
     if not STATE["artifacts_ready"]:
         raise HTTPException(status_code=503, detail="Model artifacts not ready.")
 
-    # Input hash cache check
+    # Validate and parse targets query parameter
+    if targets is not None and targets.strip():
+        raw_list = [t.strip().lower() for t in targets.split(",") if t.strip()]
+        if not raw_list:
+            raise HTTPException(status_code=422, detail="Query parameter 'targets' cannot be empty when provided.")
+        invalid_targets = [t for t in raw_list if t not in TARGET_KEYS]
+        if invalid_targets:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Unknown target(s) requested: {invalid_targets}. Allowed targets: {TARGET_KEYS}",
+            )
+        active_targets = raw_list
+    else:
+        active_targets = list(TARGET_KEYS)
+
+    # Input hash cache check (cache key includes requested targets and top_n)
     norm_dict = {k: to_python_primitive(v) for k, v in sorted(patient_features.items())}
-    cache_key = hashlib.sha256(json.dumps(norm_dict, sort_keys=True).encode("utf-8")).hexdigest()
+    cache_payload = {
+        "features": norm_dict,
+        "targets": sorted(active_targets),
+        "top_n": top_n,
+    }
+    cache_key = hashlib.sha256(json.dumps(cache_payload, sort_keys=True).encode("utf-8")).hexdigest()
     if cache_key in STATE["explain_cache"]:
         STATE["cache_hits"] += 1
         return cast(ExplainResponse, STATE["explain_cache"][cache_key])
@@ -482,7 +503,10 @@ def explain_stenosis_prediction(patient_features: dict[str, Any], top_n: int = 1
         "ESR": "Inflammatory Biomarkers",
     }
 
-    for short_name, (explainer, raw_unit) in STATE["explainers"].items():
+    for short_name in active_targets:
+        if short_name not in STATE["explainers"]:
+            continue
+        (explainer, raw_unit) = STATE["explainers"][short_name]
         t_code = TARGET_MAP[short_name]
         feature_names = list(df_patient.columns)
 
@@ -542,7 +566,7 @@ def explain_stenosis_prediction(patient_features: dict[str, Any], top_n: int = 1
             contributions=contributions,
         )
 
-        # Extract CAD physiology contributions for key clinical indicators
+        # Extract CAD physiology contributions for key clinical indicators (only when CAD is requested)
         if short_name == "cad":
             for phys_feat, cat in PHYSIOLOGY_FEATURES.items():
                 if phys_feat in feature_names:
@@ -568,22 +592,23 @@ def explain_stenosis_prediction(patient_features: dict[str, Any], top_n: int = 1
         nsamples=150,
         unit="probability points",
         note="Attributions are estimated, describe the displayed calibrated probability, and are not causes.",
+        stability_note=(
+            "Stability labels show how consistently a feature ranks in the top 10 across 20 "
+            "bootstrap refits of the native tree/linear explainers. They are a proxy and "
+            "come from a different explainer than the displayed attributions."
+        ),
     )
 
     response = ExplainResponse(
         targets=target_explanations,
-        physiology=physiology_items,
+        physiology=physiology_items if "cad" in active_targets else [],
         explainer=explainer_metadata,
-        model_version=settings.app_version,
+        model_version=settings.model_version,
         interpretation_note=(
             "Explanations describe the displayed calibrated probability in probability points "
             "and reflect model-learned associations, not causal findings."
         ),
-        disclaimer=(
-            "Explanations describe the displayed calibrated probability in probability points. "
-            "They reflect model-learned associations within this dataset, not causal findings. "
-            "Clinical decision support only; not a diagnostic medical device."
-        ),
+        disclaimer=settings.disclaimer,
     )
     if len(STATE["explain_cache"]) >= 500:
         STATE["explain_cache"].pop(next(iter(STATE["explain_cache"])))

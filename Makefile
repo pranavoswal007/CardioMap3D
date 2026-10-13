@@ -9,7 +9,7 @@ RUFF := $(VENV)/bin/ruff
 MYPY := $(VENV)/bin/mypy
 UV := $(shell which uv 2>/dev/null || echo "$$HOME/.local/bin/uv")
 
-.PHONY: all help setup train metrics-table api web test lint clean check web-typecheck web-build
+.PHONY: all help setup train metrics-table verify-artifacts api web test lint clean check web-typecheck web-build
 
 all: help
 
@@ -47,6 +47,10 @@ train:
 metrics-table:
 	@echo "==> Generating baseline metrics comparison table..."
 	$(PYTHON) -m cardiomap_ml.metrics_table
+
+verify-artifacts:
+	@echo "==> Verifying artifact consistency..."
+	$(PYTHON) -m cardiomap_ml.verify_artifacts
 
 api:
 	@echo "==> Launching FastAPI application at http://0.0.0.0:8000..."

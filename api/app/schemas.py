@@ -4,6 +4,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from .config import CANONICAL_DISCLAIMER
+
 
 class HealthResponse(BaseModel):
     """Health check status response."""
@@ -12,7 +14,7 @@ class HealthResponse(BaseModel):
     app_name: str
     model_version: str
     artifacts_ready: bool = Field(description="Whether trained ML model artifacts exist and loaded")
-    disclaimer: str = Field(description="Mandatory clinical decision-support research disclaimer")
+    disclaimer: str = Field(default=CANONICAL_DISCLAIMER, description=CANONICAL_DISCLAIMER)
 
 
 class CutoffThreshold(BaseModel):
@@ -55,7 +57,7 @@ class PredictResponse(BaseModel):
     imputed_features: list[str] = Field(description="List of omitted feature names that were filled using schema defaults")
     warnings: list[str] = Field(description="Validation warnings for out-of-range clinical inputs")
     model_version: str
-    disclaimer: str
+    disclaimer: str = Field(default=CANONICAL_DISCLAIMER, description=CANONICAL_DISCLAIMER)
 
 
 class FeatureExplanation(BaseModel):
@@ -99,8 +101,16 @@ class ExplainerMetadata(BaseModel):
     nsamples: int = Field(default=150, description="Number of Monte Carlo feature perturbation samples per patient")
     unit: str = Field(default="probability points", description="Attribution unit")
     note: str = Field(
-        default="Attributions are estimated using a model-agnostic explainer, describe the displayed calibrated probability in probability points, and reflect model-learned statistical associations rather than causal findings.",
+        default="Attributions are estimated, describe the displayed calibrated probability, and are not causes.",
         description="Clinical interpretation note",
+    )
+    stability_note: str = Field(
+        default=(
+            "Stability labels show how consistently a feature ranks in the top 10 across 20 "
+            "bootstrap refits of the native tree/linear explainers. They are a proxy and "
+            "come from a different explainer than the displayed attributions."
+        ),
+        description="Proxy explanation disclosure for bootstrap stability labels",
     )
 
 
@@ -115,7 +125,7 @@ class ExplainResponse(BaseModel):
         default="Explanations describe the displayed calibrated probability in probability points and reflect model-learned associations, not causal findings.",
         description="Clinical interpretation disclosure",
     )
-    disclaimer: str
+    disclaimer: str = Field(default=CANONICAL_DISCLAIMER, description=CANONICAL_DISCLAIMER)
 
 
 class SamplePatient(BaseModel):

@@ -332,7 +332,7 @@ def test_parity_between_api_and_offline_pipeline(client: TestClient, raw_dataset
 
 
 def test_openapi_schema_has_threshold_and_explainer(client: TestClient) -> None:
-    """Verify OpenAPI schema publishes threshold, high_threshold, and explainer fields."""
+    """Verify OpenAPI schema publishes threshold, high_threshold, and explainer fields with stability_note."""
     response = client.get("/openapi.json")
     assert response.status_code == 200
     schema = response.json()
@@ -347,6 +347,70 @@ def test_openapi_schema_has_threshold_and_explainer(client: TestClient) -> None:
     assert "explainer" in schemas["ExplainResponse"]["properties"]
     assert "ExplainerMetadata" in schemas
     expl_props = schemas["ExplainerMetadata"]["properties"]
-    for req_field in ["method", "background_size", "nsamples", "unit", "note"]:
+    for req_field in ["method", "background_size", "nsamples", "unit", "note", "stability_note"]:
         assert req_field in expl_props, f"Field '{req_field}' missing from ExplainerMetadata schema"
+
+
+def test_disclaimer_canonical_content(client: TestClient) -> None:
+    """Verify every JSON response carrying a disclaimer contains 'educational' and 'diagnostic imaging'."""
+    sample_input = {"Age": 60, "Sex": "Male"}
+
+    # 1. /health
+    health_res = client.get("/health").json()
+    assert "disclaimer" in health_res
+    assert "educational" in health_res["disclaimer"].lower()
+    assert "diagnostic imaging" in health_res["disclaimer"].lower()
+
+    # 2. /predict
+    predict_res = client.post("/predict", json=sample_input).json()
+    assert "disclaimer" in predict_res
+    assert "educational" in predict_res["disclaimer"].lower()
+    assert "diagnostic imaging" in predict_res["disclaimer"].lower()
+
+    # 3. /explain
+    explain_res = client.post("/explain?targets=cad", json=sample_input).json()
+    assert "disclaimer" in explain_res
+    assert "educational" in explain_res["disclaimer"].lower()
+    assert "diagnostic imaging" in explain_res["disclaimer"].lower()
+
+
+def test_explain_targets_parameter_subset(client: TestClient) -> None:
+    """Verify /explain respects targets parameter, filters outputs, and handles physiology correctly."""
+    sample_input = {"Age": 62, "Sex": "Male"}
+
+    # Subset: lad,lcx
+    res = client.post("/explain?targets=lad,lcx", json=sample_input)
+    assert res.status_code == 200
+    data = res.json()
+    assert set(data["targets"].keys()) == {"lad", "lcx"}
+    assert len(data["physiology"]) == 0  # CAD not requested -> physiology empty
+    assert data["explainer"]["stability_note"].startswith("Stability labels show")
+
+    # Single: cad
+    res_cad = client.post("/explain?targets=cad", json=sample_input)
+    assert res_cad.status_code == 200
+    data_cad = res_cad.json()
+    assert set(data_cad["targets"].keys()) == {"cad"}
+    assert len(data_cad["physiology"]) > 0  # CAD requested -> physiology present
+
+    # Unknown target -> 422
+    res_err = client.post("/explain?targets=foo,lad", json=sample_input)
+    assert res_err.status_code == 422
+    assert "Unknown target(s)" in res_err.json()["detail"]
+
+
+def test_explain_cache_and_determinism_per_target(client: TestClient) -> None:
+    """Verify cache keys isolate distinct target queries and attributions are deterministic."""
+    sample_input = {"Age": 65, "Sex": "Male"}
+
+    res_lad1 = client.post("/explain?targets=lad", json=sample_input).json()
+    res_lcx1 = client.post("/explain?targets=lcx", json=sample_input).json()
+
+    assert set(res_lad1["targets"].keys()) == {"lad"}
+    assert set(res_lcx1["targets"].keys()) == {"lcx"}
+
+    # Repeated query -> identical deterministic values
+    res_lad2 = client.post("/explain?targets=lad", json=sample_input).json()
+    assert res_lad1["targets"]["lad"]["contributions"][0]["feature"] == res_lad2["targets"]["lad"]["contributions"][0]["feature"]
+    assert res_lad1["targets"]["lad"]["contributions"][0]["shap_value"] == res_lad2["targets"]["lad"]["contributions"][0]["shap_value"]
 

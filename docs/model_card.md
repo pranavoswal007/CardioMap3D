@@ -1,6 +1,7 @@
 # CardioMap 3D: Model Card & Clinical System Disclosures
 
 ## 1. Model Overview & Purpose
+* **Model Version**: `0.2.0`
 CardioMap 3D is a machine learning-powered clinical risk estimation and interactive 3D coronary visualization system. The system estimates the calibrated probability of obstructive coronary artery disease (CAD, $\ge 50\%$ diameter stenosis) overall and specifically across the three primary coronary arteries:
 * **`y_cad`**: Overall coronary artery disease (derived from catheterization outcome `Cath`)
   - **Deployed Architecture**: `SoftVotingEnsemble` combining `LogisticRegression(C=1.0)`, `RandomForest(max_depth=6)`, and `XGBoost(max_depth=4)`, wrapped in 5-fold Sigmoid calibration (`CalibratedClassifierCV(method='sigmoid', cv=5)`).
@@ -13,7 +14,7 @@ CardioMap 3D is a machine learning-powered clinical risk estimation and interact
 
 **Evaluated vs. Deployed Equivalence**: The deployed model pipelines saved in `artifacts/model_*.joblib` are bitwise identical to the architectures evaluated in cross-validation (`ml/src/cardiomap_ml/train.py`, `NESTED_TUNING_CONFIG`). Evaluated models strictly equal deployed models.
 
-**Intended Use**: Clinical decision-support tool for pre-catheterization risk stratification and anatomical visualization of coronary stenosis risk. It is **not** a standalone diagnostic device or medical device.
+**Intended Use & Mandatory Clinical Disclaimer**: CardioMap 3D is for decision support and educational purposes only. It is not a medical device and not a substitute for formal diagnostic imaging (such as coronary angiography) or professional clinical judgment.
 
 ---
 

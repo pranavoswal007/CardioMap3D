@@ -54,5 +54,4 @@ data/processed/*
 # ML Artifacts (allow gitkeep, ignore large binary checkpoints)
 artifacts/*.onnx
 artifacts/*.pkl
-artifacts/*.joblib
 !artifacts/.gitkeep
