@@ -41,8 +41,7 @@ export function lerpHex(hexA: string, hexB: string, t: number): string {
  * - t <= p < tHigh: lerp yellow (#eab308) to orange (#f97316)
  * - p >= tHigh: lerp orange (#f97316) to red (#ef4444), full red at tRed (clamped)
  * - data null: neutral gray (#64748b)
- *
- * Notice: Positive predictions are labeled "above screening cutoff" (never "moderate risk").
+ * Notice: Positive predictions are labeled "above screening cutoff".
  */
 export function evaluateVesselColor(data: VesselData): VesselColorEvaluation {
   if (!data || data.probability === null || data.probability === undefined || Number.isNaN(data.probability)) {
