@@ -145,7 +145,7 @@ export function PatientForm() {
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+      <form onSubmit={handleSubmit} noValidate className="mt-4 space-y-4">
         {Object.entries(GROUP_LABELS).map(([groupKey, groupTitle]) => {
           const items = groupedFeatures[groupKey];
           if (!items || items.length === 0) return null;
@@ -223,7 +223,7 @@ export function PatientForm() {
                             value={val}
                             min={feat.min ?? undefined}
                             max={feat.max ?? undefined}
-                            step={feat.name === 'EF-TTE' || feat.name === 'BMI' || feat.name === 'K' ? '0.1' : '1'}
+                            step="any"
                             placeholder={feat.default !== undefined && feat.default !== null ? `Default: ${feat.default}` : ''}
                             onChange={(e) => setPatientInput(feat.name, e.target.value)}
                             className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
