@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useRef, useState, useEffect, useMemo, useCallback } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, ContactShadows, Bounds, useBounds } from '@react-three/drei';
 import * as THREE from 'three';
@@ -11,8 +11,13 @@ import { evaluateVesselColor } from '../utils/vesselColors';
 import { HeartBody } from './HeartBody';
 import { CoronaryArteryMesh } from './CoronaryArteryMesh';
 import { createTaperedTubeGeometry } from '../utils/taperedTube';
-import { DevDebugPanel } from './DevDebugPanel';
 import heartAttributionText from '../../public/models/ATTRIBUTION.txt?raw';
+
+// Lazy-load debug panel and mask overlay so normal clinical bundle does not grow
+const DevDebugPanel = React.lazy(() => import('./DevDebugPanel'));
+const ArteryMaskOverlay = React.lazy(() =>
+  import('../debug/ArteryMaskOverlay').then((m) => ({ default: m.ArteryMaskOverlay }))
+);
 
 const INITIAL_CAMERA_POS: [number, number, number] = [0, 0.4, 3.8];
 const INITIAL_TARGET_POS: [number, number, number] = [0, 0, 0];
@@ -185,6 +190,7 @@ export function HeartViewer({
 }: HeartViewerProps) {
   const controlsRef = useRef<OrbitControlsImpl>(null);
   const heartMeshRef = useRef<THREE.Mesh | null>(null);
+  const [heartMesh, setHeartMesh] = useState<THREE.Mesh | null>(null);
 
   const [resetCount, setResetCount] = useState(0);
   const [hoveredVessel, setHoveredVessel] = useState<VesselId | null>(null);
@@ -203,6 +209,8 @@ export function HeartViewer({
   const [debugVessels, setDebugVessels] = useState<Record<VesselId, VesselData> | null>(null);
   const [heartTransform, setHeartTransform] = useState<HeartTransformConfig>(defaultHeartTransform);
   const [normalOffset, setNormalOffset] = useState<number>(0.02);
+  const [activeMask, setActiveMask] = useState<Uint8Array | null>(null);
+  const debugPointerHandlerRef = useRef<((point: THREE.Vector3, normal?: THREE.Vector3) => void) | null>(null);
 
   // Spline points for all vessels (draft persistence)
   const [allVesselPoints, setAllVesselPoints] = useState<Record<VesselId, [number, number, number][]>>(() => {
@@ -237,6 +245,13 @@ export function HeartViewer({
       [id]: data,
     }));
   };
+
+  const handleUpdateVesselPoints = useCallback((vessel: VesselId, points: [number, number, number][]) => {
+    setAllVesselPoints((prev) => ({
+      ...prev,
+      [vessel]: points,
+    }));
+  }, []);
 
   // Automatic mesh surface projection at load when coronary.json is not yet traced
   const hasProjectedRef = useRef(false);
@@ -273,6 +288,7 @@ export function HeartViewer({
 
   const handleMeshReady = useCallback((mesh: THREE.Mesh) => {
     heartMeshRef.current = mesh;
+    setHeartMesh(mesh);
     projectPointsOntoMesh(mesh);
   }, [projectPointsOntoMesh]);
 
@@ -323,8 +339,12 @@ export function HeartViewer({
     });
   };
 
-  // Raycast click on heart surface during trace mode
+  // Raycast click on heart surface during trace mode or debug color/trace modes
   const handleMeshPointerDown = (point: THREE.Vector3, normal?: THREE.Vector3) => {
+    if (debugPointerHandlerRef.current) {
+      debugPointerHandlerRef.current(point, normal);
+      return;
+    }
     if (!tracingVessel) return;
     const norm = normal || new THREE.Vector3(0, 0, 1);
     const offsetPoint: [number, number, number] = [
@@ -569,6 +589,13 @@ export function HeartViewer({
                 />
               ))}
 
+              {/* Mask overlay on heart mesh vertices when active in debug mode */}
+              {isDebugMode && activeMask && heartMesh && (
+                <React.Suspense fallback={null}>
+                  <ArteryMaskOverlay mesh={heartMesh} mask={activeMask} />
+                </React.Suspense>
+              )}
+
               {tracingVessel && activeTracePoints.length > 0 && (
                 <TracePreview points={activeTracePoints} />
               )}
@@ -743,23 +770,32 @@ export function HeartViewer({
 
       {/* Optional Dev Debug & Surface Tracing Panel (?debug) */}
       {isDebugMode && (
-        <DevDebugPanel
-          vessels={effectiveVessels}
-          onChangeVesselData={handleDebugChange}
-          tracingVessel={tracingVessel}
-          onStartTracing={handleStartTracing}
-          onCancelTracing={handleCancelTracing}
-          onFinishTracing={handleFinishTracing}
-          onUndoLastPoint={handleUndoLastPoint}
-          tracePointsCount={activeTracePoints.length}
-          allVesselPoints={allVesselPoints}
-          normalOffset={normalOffset}
-          onChangeNormalOffset={setNormalOffset}
-          onSnapToSurface={handleSnapToSurface}
-          heartTransform={heartTransform}
-          onChangeHeartTransform={setHeartTransform}
-          onResetPoints={handleResetPoints}
-        />
+        <React.Suspense fallback={null}>
+          <DevDebugPanel
+            vessels={effectiveVessels}
+            onChangeVesselData={handleDebugChange}
+            tracingVessel={tracingVessel}
+            onStartTracing={handleStartTracing}
+            onCancelTracing={handleCancelTracing}
+            onFinishTracing={handleFinishTracing}
+            onUndoLastPoint={handleUndoLastPoint}
+            tracePointsCount={activeTracePoints.length}
+            allVesselPoints={allVesselPoints}
+            normalOffset={normalOffset}
+            onChangeNormalOffset={setNormalOffset}
+            onSnapToSurface={handleSnapToSurface}
+            heartTransform={heartTransform}
+            onChangeHeartTransform={setHeartTransform}
+            onResetPoints={handleResetPoints}
+            heartMesh={heartMesh}
+            onUpdateVesselPoints={handleUpdateVesselPoints}
+            onSetAllVesselPoints={setAllVesselPoints}
+            onSetMask={setActiveMask}
+            registerPointerHandler={(fn) => {
+              debugPointerHandlerRef.current = fn;
+            }}
+          />
+        </React.Suspense>
       )}
     </div>
   );
