@@ -114,16 +114,16 @@ describe('T2-1.2: Attributions Panel Placement, Column Balance, and Order', () =
     expect(patientFormWrapper.className).toContain('order-6');
   });
 
-  it('verifies desktop right column places What-If directly under results for visibility within first 900px', async () => {
+  it('verifies desktop right column places Territory Map directly under results for same-frame visibility with 3D model', async () => {
     render(<App />);
 
     const resultsWrapper = await screen.findByTestId('results-wrapper');
-    const whatIfWrapper = await screen.findByTestId('what-if-wrapper');
     const territoryWrapper = await screen.findByTestId('territory-map-wrapper');
+    const whatIfWrapper = await screen.findByTestId('what-if-wrapper');
 
     expect(resultsWrapper.className).toContain('lg:order-1');
-    expect(whatIfWrapper.className).toContain('lg:order-2');
-    expect(territoryWrapper.className).toContain('lg:order-3');
+    expect(territoryWrapper.className).toContain('lg:order-2');
+    expect(whatIfWrapper.className).toContain('lg:order-3');
   });
 
   it('maintains the COLOR RULE invariants across all standard threshold conditions', () => {

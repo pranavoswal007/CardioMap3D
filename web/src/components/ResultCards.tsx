@@ -25,8 +25,8 @@ export function ProbabilityBar({ probability, threshold, highThreshold }: Probab
       : 'bg-emerald-500';
 
   return (
-    <div className="space-y-1.5 pt-1">
-      <div className="relative h-3 w-full bg-slate-800 rounded-full overflow-visible border border-slate-700">
+    <div className="space-y-1 pt-0.5">
+      <div className="relative h-2 w-full bg-slate-800 rounded-full overflow-visible border border-slate-700">
         {/* Progress fill */}
         <div
           data-testid="probability-fill"
@@ -37,7 +37,7 @@ export function ProbabilityBar({ probability, threshold, highThreshold }: Probab
         {/* Operating Threshold Tick */}
         <div
           data-testid="threshold-tick"
-          className="absolute top-[-3px] bottom-[-3px] w-0.5 bg-yellow-400 z-10 shadow-sm"
+          className="absolute top-[-2px] bottom-[-2px] w-0.5 bg-yellow-400 z-10 shadow-sm"
           style={{ left: `${threshPct}%` }}
           title={`Screening Cutoff: ${(threshold * 100).toFixed(1)}%`}
         />
@@ -45,13 +45,13 @@ export function ProbabilityBar({ probability, threshold, highThreshold }: Probab
         {/* High Threshold Tick */}
         <div
           data-testid="high-threshold-tick"
-          className="absolute top-[-3px] bottom-[-3px] w-0.5 bg-rose-400 z-10 shadow-sm"
+          className="absolute top-[-2px] bottom-[-2px] w-0.5 bg-rose-400 z-10 shadow-sm"
           style={{ left: `${highThreshPct}%` }}
           title={`High Cutoff: ${(highThreshold * 100).toFixed(1)}%`}
         />
       </div>
 
-      <div className="flex justify-between text-[10px] text-slate-400">
+      <div className="flex justify-between text-[9px] text-slate-400">
         <span>0%</span>
         <span className="text-yellow-400 font-medium">Cutoff: {(threshold * 100).toFixed(1)}%</span>
         <span className="text-rose-400 font-medium">High: {(highThreshold * 100).toFixed(1)}%</span>
@@ -95,43 +95,43 @@ export function TargetCard({
   return (
     <div
       onClick={onSelect}
-      className={`p-4 rounded-xl border cursor-pointer transition-all ${
+      className={`p-2.5 sm:p-3 rounded-xl border cursor-pointer transition-all ${
         isSelected
-          ? 'bg-slate-850 border-indigo-500 ring-2 ring-indigo-500/30 shadow-lg shadow-indigo-950/40'
+          ? 'bg-slate-850 border-indigo-500 ring-2 ring-indigo-500/30 shadow-md shadow-indigo-950/40'
           : 'bg-slate-900 border-slate-800 hover:border-slate-700 hover:bg-slate-850/50'
       }`}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <div className="flex items-center gap-2">
-            <h3 className="text-sm font-semibold text-white">{title}</h3>
+      <div className="flex items-start justify-between gap-1.5">
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5">
+            <h3 className="text-xs sm:text-sm font-semibold text-white truncate">{title}</h3>
             {isSelected && (
-              <span className="px-1.5 py-0.2 bg-indigo-500/20 text-indigo-300 text-[10px] rounded border border-indigo-500/40">
+              <span className="px-1.5 py-0.2 bg-indigo-500/20 text-indigo-300 text-[9px] rounded border border-indigo-500/40 shrink-0">
                 Selected
               </span>
             )}
           </div>
-          <p className="text-[11px] text-slate-400">{subtitle}</p>
+          <p className="text-[10px] text-slate-400 truncate mt-0.5">{subtitle}</p>
         </div>
 
-        <div className="text-right">
-          <div className="text-lg font-bold text-white tracking-tight">
+        <div className="text-right shrink-0">
+          <div className="text-base sm:text-lg font-bold text-white tracking-tight leading-none">
             {(prediction.probability * 100).toFixed(1)}%
           </div>
           {whatIfActive && baselineP !== undefined && (
             <div
-              className={`text-[11px] font-semibold font-mono flex items-center justify-end gap-0.5 ${delta.colorClass}`}
+              className={`text-[10px] font-semibold font-mono flex items-center justify-end gap-0.5 mt-0.5 ${delta.colorClass}`}
               title="Probability delta vs baseline"
             >
-              {delta.arrow === 'up' && <ArrowUp className="w-3 h-3" />}
-              {delta.arrow === 'down' && <ArrowDown className="w-3 h-3" />}
-              {delta.arrow === 'neutral' && <Minus className="w-3 h-3" />}
+              {delta.arrow === 'up' && <ArrowUp className="w-2.5 h-2.5" />}
+              {delta.arrow === 'down' && <ArrowDown className="w-2.5 h-2.5" />}
+              {delta.arrow === 'neutral' && <Minus className="w-2.5 h-2.5" />}
               <span>{delta.deltaText}</span>
             </div>
           )}
           <div className="flex flex-col items-end gap-0.5 mt-0.5">
             <span
-              className={`inline-block px-2 py-0.5 rounded text-[10px] font-medium ${
+              className={`inline-block px-1.5 py-0.2 rounded text-[9px] font-medium leading-tight ${
                 isElevated
                   ? 'bg-amber-950/60 text-amber-300 border border-amber-800/60'
                   : 'bg-emerald-950/60 text-emerald-300 border border-emerald-800/60'
@@ -140,7 +140,7 @@ export function TargetCard({
               {displayLabel}
             </span>
             {tierBand && (
-              <span className="text-[9px] text-slate-400 font-mono">
+              <span className="text-[8px] text-slate-400 font-mono leading-none">
                 {tierBand}
               </span>
             )}
@@ -148,7 +148,7 @@ export function TargetCard({
         </div>
       </div>
 
-      <div className="mt-3">
+      <div className="mt-2">
         <ProbabilityBar
           probability={prediction.probability}
           threshold={prediction.threshold}
@@ -156,13 +156,13 @@ export function TargetCard({
         />
       </div>
 
-      <div className="mt-3 pt-2.5 border-t border-slate-800 grid grid-cols-2 gap-2 text-[11px]">
+      <div className="mt-2 pt-1.5 border-t border-slate-800/80 grid grid-cols-2 gap-1.5 text-[10px]">
         <div>
           <span className="text-slate-400">Relative Risk: </span>
           <span className="font-semibold text-slate-200">{prediction.relative_risk.toFixed(2)}x</span>
         </div>
         <div>
-          <span className="text-slate-400">Cohort Prevalence: </span>
+          <span className="text-slate-400">Prevalence: </span>
           <span className="font-semibold text-slate-200">
             {(prediction.cohort_prevalence * 100).toFixed(1)}%
           </span>
@@ -171,9 +171,9 @@ export function TargetCard({
 
       {/* Special context note for LCX and RCA per contract */}
       {(id === 'lcx' || id === 'rca') && isVessel && (
-        <div className="mt-2.5 p-2 bg-slate-950/60 rounded text-[10px] text-slate-400 border border-slate-800/80 leading-relaxed">
+        <div className="mt-1.5 p-1.5 bg-slate-950/60 rounded text-[9px] text-slate-400 border border-slate-800/80 leading-snug">
           <span className="font-semibold text-slate-300">Cohort context: </span>
-          A positive label here indicates passing the screening cutoff, not necessarily above-average cohort risk; see probability and relative risk.
+          A positive label indicates passing screening cutoff, not necessarily above-average cohort risk; see probability and relative risk.
         </div>
       )}
     </div>
@@ -217,11 +217,11 @@ export function ResultCards() {
     Math.abs(cad.probability - coh.raw_cad_probability) > 1e-5;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-2.5">
       {/* Coherence & Consistency Banner */}
       {isIncoherent && (
-        <div className="p-3.5 bg-amber-950/40 border border-amber-800/80 rounded-xl text-amber-200 text-xs flex items-start gap-2.5">
-          <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+        <div className="p-2.5 bg-amber-950/40 border border-amber-800/80 rounded-lg text-amber-200 text-xs flex items-start gap-2">
+          <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
           <div className="space-y-1">
             <div className="font-semibold text-amber-300">
               Model consistency notice: at least one vessel probability is higher than the overall CAD probability. These outputs come from separate models, so treat this as an uncertainty flag, not a diagnosis.
@@ -235,7 +235,7 @@ export function ResultCards() {
 
       {/* API Clinical Warnings */}
       {warnings && warnings.length > 0 && (
-        <div className="p-3 bg-slate-900 border border-slate-800 rounded-xl text-xs space-y-1">
+        <div className="p-2.5 bg-slate-900 border border-slate-800 rounded-lg text-xs space-y-1">
           <div className="font-semibold text-slate-300 flex items-center gap-1.5">
             <Activity className="w-4 h-4 text-indigo-400" />
             Model Input Verification Notices:
@@ -249,7 +249,7 @@ export function ResultCards() {
       )}
 
       {/* Main CAD and 3-Vessel Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
         <TargetCard
           id="cad"
           title="Overall CAD Risk"

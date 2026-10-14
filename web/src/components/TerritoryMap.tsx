@@ -94,7 +94,7 @@ export function TerritoryMap({ vessels, hasPrediction }: TerritoryMapProps) {
   return (
     <div
       data-testid="territory-map-container"
-      className="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-xl max-w-[320px] w-full mx-auto"
+      className="bg-slate-900 border border-slate-800 rounded-xl p-2.5 sm:p-3 shadow-xl max-w-[320px] w-full mx-auto"
     >
       {/* Collapsible Card Header */}
       <button
@@ -125,7 +125,7 @@ export function TerritoryMap({ vessels, hasPrediction }: TerritoryMapProps) {
           <div className="relative flex items-center justify-center p-0.5">
             <svg
               viewBox="0 0 320 320"
-              className="w-56 h-56 sm:w-60 sm:h-60"
+              className="w-52 h-52 sm:w-56 sm:h-56"
               role="region"
               aria-label="AHA 17-Segment Coronary Territory Bull's-Eye Map"
               aria-describedby={captionId}

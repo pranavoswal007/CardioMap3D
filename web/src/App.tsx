@@ -331,12 +331,12 @@ export function App() {
               </div>
             </section>
 
-            {/* Right Column: Results, What-If, Territory Map, Patient Form (~42% on Desktop) */}
+            {/* Right Column: Results, Territory Map, What-If, Patient Form (~42% on Desktop) */}
             <section
               data-testid="right-column"
-              className="contents lg:flex lg:flex-col lg:w-[42%] gap-6"
+              className="contents lg:flex lg:flex-col lg:w-[42%] gap-4"
             >
-              {/* 1. Results (CAD card, vessel cards) */}
+              {/* 1. Results (CAD card, 3 vessel cards) */}
               <div
                 data-testid="results-wrapper"
                 className="order-2 lg:order-1 w-full"
@@ -344,10 +344,23 @@ export function App() {
                 <ResultCards />
               </div>
 
-              {/* 2. What-If Mode Toggle Banner & Panel (placed directly under vessel cards for visibility in first 900px) */}
+              {/* 2. Territory Map (AHA 17-segment, collapsible, centered, max-w-[320px]) - Placed directly under Results to remain in same frame as 3D heart */}
+              <div
+                data-testid="territory-map-wrapper"
+                className="order-3 lg:order-2 w-full"
+              >
+                <React.Suspense fallback={<ComponentFallback label="territory map" />}>
+                  <TerritoryMap
+                    vessels={vesselsProp}
+                    hasPrediction={Boolean(prediction)}
+                  />
+                </React.Suspense>
+              </div>
+
+              {/* 3. What-If Mode Toggle Banner & Panel */}
               <div
                 data-testid="what-if-wrapper"
-                className="order-4 lg:order-2 w-full space-y-4"
+                className="order-4 lg:order-3 w-full space-y-3"
               >
                 <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-lg flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -386,19 +399,6 @@ export function App() {
                     <WhatIfPanel />
                   </React.Suspense>
                 )}
-              </div>
-
-              {/* 3. Territory Map (AHA 17-segment, collapsible, centered, max-w-[320px]) */}
-              <div
-                data-testid="territory-map-wrapper"
-                className="order-3 lg:order-3 w-full"
-              >
-                <React.Suspense fallback={<ComponentFallback label="territory map" />}>
-                  <TerritoryMap
-                    vessels={vesselsProp}
-                    hasPrediction={Boolean(prediction)}
-                  />
-                </React.Suspense>
               </div>
 
               {/* 4. Patient Form (collapses into one-line summary after prediction) */}
